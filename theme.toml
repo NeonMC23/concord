@@ -1,10 +1,9 @@
-# VΞRN Core v3 — Refined
-# Dark technical UI / restrained pink accent
+# VΞRN Core v3 — Transparent
+# Transparent terminal background / restrained pink accent
 # >_ VΞRN
 
 [highlight.Normal]
 foreground = "#E8E8E8"
-background = "#1C1C1C"
 
 [highlight.Strong]
 foreground = "#FFFFFF"
@@ -114,7 +113,6 @@ link = "FocusBorder"
 
 [highlight.Selection]
 foreground = "#FFFFFF"
-background = "#2A2228"
 bold = true
 
 [highlight.SelectedRow]
@@ -126,7 +124,6 @@ bold = true
 
 [highlight.ActiveTab]
 foreground = "#FF66C4"
-background = "#2A2228"
 bold = true
 
 [highlight.ActiveField]
@@ -223,11 +220,9 @@ foreground = "#555555"
 
 [highlight.InlineCode]
 foreground = "#FF9AD6"
-background = "#292129"
 
 [highlight.InlineTimestamp]
 foreground = "#D6D6D6"
-background = "#292929"
 
 [highlight.CodeBlockBorder]
 foreground = "#363636"
@@ -276,12 +271,10 @@ foreground = "#FF66C4"
 
 [highlight.MentionSelf]
 foreground = "#FFFFFF"
-background = "#54243F"
 bold = true
 
 [highlight.MentionOther]
 foreground = "#FFD4EA"
-background = "#352733"
 
 [highlight.MentionRole]
 foreground = "#FF9AD6"
@@ -327,7 +320,6 @@ bold = true
 
 [highlight.UnreadBanner]
 foreground = "#FFFFFF"
-background = "#FF66C4"
 bold = true
 
 [highlight.UnreadDivider]
@@ -452,7 +444,6 @@ foreground = "#FF9AD6"
 
 [highlight.BotBadge]
 foreground = "#FFFFFF"
-background = "#352733"
 bold = true
 
 [highlight.CommandName]
