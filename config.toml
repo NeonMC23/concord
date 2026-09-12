@@ -1,0 +1,17 @@
+[display]
+image_protocol = "iterm2"
+
+disable_image_preview = false
+
+show_images = true
+show_custom_emoji = true
+
+show_avatars = true
+circular_avatars = true
+animate_previews = "always"
+
+# Bon compromis pour les images inline
+image_preview_quality = "balanced"
+
+# Qualité maximale quand tu ouvres une image
+attachment_viewer_quality = "original"

@@ -1,0 +1,539 @@
+# ============================================================
+# VΞRN — Concord Theme
+# Dark / Terminal / Technical
+# Brand: #1C1C1C · #FF66C4 · #FFFFFF
+# ============================================================
+
+
+# ------------------------------------------------------------
+# BASE
+# ------------------------------------------------------------
+
+[highlight.Normal]
+foreground = "#FFFFFF"
+background = "#1C1C1C"
+
+[highlight.Strong]
+foreground = "#FFFFFF"
+bold = true
+
+[highlight.Emphasis]
+foreground = "#FFFFFF"
+italic = true
+
+[highlight.Muted]
+foreground = "#8E8E8E"
+dim = false
+
+[highlight.Title]
+foreground = "#FFFFFF"
+bold = true
+
+[highlight.Heading]
+foreground = "#FF66C4"
+bold = true
+
+
+# ------------------------------------------------------------
+# SECONDARY CONTENT
+# ------------------------------------------------------------
+
+[highlight.Decoration]
+foreground = "#4A4A4A"
+
+[highlight.Hint]
+foreground = "#8E8E8E"
+
+[highlight.Description]
+foreground = "#A8A8A8"
+
+[highlight.Shortcut]
+foreground = "#777777"
+
+[highlight.Activity]
+foreground = "#8E8E8E"
+
+[highlight.ChannelTypeMarker]
+foreground = "#777777"
+
+[highlight.FieldLabel]
+foreground = "#8E8E8E"
+
+[highlight.SearchContext]
+foreground = "#777777"
+
+[highlight.Timestamp]
+foreground = "#777777"
+
+[highlight.Placeholder]
+foreground = "#666666"
+
+[highlight.Disabled]
+foreground = "#555555"
+
+[highlight.Loading]
+foreground = "#FF66C4"
+
+[highlight.Edited]
+foreground = "#777777"
+italic = true
+
+[highlight.Unavailable]
+foreground = "#666666"
+strikethrough = true
+
+
+# ------------------------------------------------------------
+# BORDERS
+# ------------------------------------------------------------
+
+[highlight.Border]
+foreground = "#3A3A3A"
+
+[highlight.FocusBorder]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.SelectionBorder]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.PaneBorder]
+foreground = "#3A3A3A"
+
+[highlight.FocusedPaneBorder]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.LoginBorder]
+foreground = "#FF66C4"
+
+[highlight.ComposerBorder]
+foreground = "#3A3A3A"
+
+[highlight.ActiveComposerBorder]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.ModalBorder]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.ComposerPickerBorder]
+foreground = "#FF66C4"
+
+
+# ------------------------------------------------------------
+# SELECTION
+# ------------------------------------------------------------
+
+[highlight.Selection]
+foreground = "#FFFFFF"
+background = "#2B2029"
+bold = true
+
+[highlight.SelectedRow]
+foreground = "#FFFFFF"
+background = "#2B2029"
+bold = true
+
+[highlight.SelectionMarker]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.ActiveTab]
+foreground = "#FF66C4"
+background = "#2B2029"
+bold = true
+
+[highlight.ActiveField]
+foreground = "#FF66C4"
+bold = true
+
+
+# ------------------------------------------------------------
+# HEADERS / TITLES
+# ------------------------------------------------------------
+
+[highlight.LoginTitle]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.PaneTitle]
+foreground = "#FFFFFF"
+bold = true
+
+[highlight.ModalTitle]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.ComposerTitle]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.HeaderTitle]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.HeaderLabel]
+foreground = "#8E8E8E"
+
+[highlight.CategoryHeading]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.MemberGroupHeading]
+foreground = "#A8A8A8"
+bold = true
+
+
+# ------------------------------------------------------------
+# MESSAGES
+# ------------------------------------------------------------
+
+[highlight.MessageAuthor]
+foreground = "#FFFFFF"
+bold = true
+
+[highlight.MessageTimestamp]
+foreground = "#777777"
+
+[highlight.MessageBody]
+foreground = "#FFFFFF"
+
+[highlight.MessageSecondary]
+foreground = "#8E8E8E"
+
+[highlight.MessageSelectedBorder]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.MessageAttachment]
+foreground = "#FF66C4"
+
+[highlight.ImageOverflow]
+foreground = "#FF66C4"
+bold = true
+
+
+# ------------------------------------------------------------
+# MARKDOWN
+# ------------------------------------------------------------
+
+[highlight.MarkdownHeading1]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.MarkdownHeading2]
+foreground = "#FFFFFF"
+bold = true
+underline = true
+
+[highlight.MarkdownHeading3]
+foreground = "#D6D6D6"
+bold = true
+
+[highlight.MarkdownQuote]
+foreground = "#A8A8A8"
+
+[highlight.MarkdownMarker]
+foreground = "#FF66C4"
+
+[highlight.InlineCode]
+foreground = "#FF9AD6"
+background = "#282028"
+
+[highlight.CodeBlockBorder]
+foreground = "#4A4A4A"
+
+
+# ------------------------------------------------------------
+# LINKS
+# ------------------------------------------------------------
+
+[highlight.MessageLink]
+foreground = "#FF66C4"
+underline = true
+
+[highlight.EmbedLink]
+foreground = "#FF66C4"
+underline = true
+
+
+# ------------------------------------------------------------
+# EMBEDS
+# ------------------------------------------------------------
+
+[highlight.EmbedAuthor]
+foreground = "#A8A8A8"
+italic = true
+
+[highlight.EmbedTitle]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.EmbedFieldName]
+foreground = "#FFFFFF"
+bold = true
+underline = true
+
+[highlight.EmbedFooter]
+foreground = "#777777"
+italic = true
+
+[highlight.EmbedGutter]
+foreground = "#FF66C4"
+
+
+# ------------------------------------------------------------
+# MENTIONS
+# ------------------------------------------------------------
+
+[highlight.MentionSelf]
+foreground = "#FFFFFF"
+background = "#5A2548"
+bold = true
+
+[highlight.MentionOther]
+foreground = "#FFD1EA"
+background = "#3A2634"
+
+[highlight.MentionPickerRole]
+foreground = "#FF66C4"
+
+
+# ------------------------------------------------------------
+# NAVIGATION
+# ------------------------------------------------------------
+
+[highlight.NavigationActive]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.NavigationMentioned]
+foreground = "#FFD1EA"
+bold = true
+
+[highlight.NavigationNotified]
+foreground = "#FFFFFF"
+
+[highlight.NavigationUnread]
+foreground = "#FFFFFF"
+
+[highlight.UnreadNotice]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.MentionBadge]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.NotificationBadge]
+foreground = "#FFFFFF"
+bold = true
+
+
+# ------------------------------------------------------------
+# UNREAD
+# ------------------------------------------------------------
+
+[highlight.UnreadBanner]
+foreground = "#FFFFFF"
+background = "#FF66C4"
+bold = true
+
+[highlight.UnreadDivider]
+foreground = "#FF66C4"
+bold = true
+
+
+# ------------------------------------------------------------
+# SCROLLBAR
+# ------------------------------------------------------------
+
+[highlight.ScrollbarThumb]
+foreground = "#6A6A6A"
+
+[highlight.ScrollbarTrack]
+foreground = "#303030"
+
+
+# ------------------------------------------------------------
+# REACTIONS
+# ------------------------------------------------------------
+
+[highlight.Reaction]
+foreground = "#FF9AD6"
+
+[highlight.SelfReaction]
+foreground = "#FF66C4"
+bold = true
+
+
+# ------------------------------------------------------------
+# PRESENCE
+# ------------------------------------------------------------
+
+[highlight.PresenceOnline]
+foreground = "#70D6A3"
+
+[highlight.PresenceIdle]
+foreground = "#E0B85A"
+
+[highlight.PresenceDnd]
+foreground = "#FF6B6B"
+
+[highlight.PresenceOffline]
+foreground = "#666666"
+dim = true
+
+
+# ------------------------------------------------------------
+# VOICE
+# ------------------------------------------------------------
+
+[highlight.VoiceDisabled]
+foreground = "#E0B85A"
+
+[highlight.VoiceConnection]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.JoinedVoiceChannel]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.VoiceSpeaking]
+foreground = "#70D6A3"
+bold = true
+
+
+# ------------------------------------------------------------
+# SYSTEM / STATUS
+# ------------------------------------------------------------
+
+[highlight.Error]
+foreground = "#FF6B6B"
+bold = true
+
+[highlight.Warning]
+foreground = "#E0B85A"
+bold = true
+
+[highlight.Success]
+foreground = "#70D6A3"
+bold = true
+
+[highlight.Info]
+foreground = "#FF66C4"
+
+[highlight.HeaderError]
+foreground = "#FF6B6B"
+bold = true
+
+[highlight.HeaderWarning]
+foreground = "#E0B85A"
+bold = true
+
+[highlight.Editing]
+foreground = "#FF9AD6"
+
+
+
+# ------------------------------------------------------------
+# FORUMS
+# ------------------------------------------------------------
+
+[highlight.ForumBorder]
+foreground = "#4A4A4A"
+
+[highlight.ForumSelectedBorder]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.ForumSecondary]
+foreground = "#777777"
+
+[highlight.ForumPinnedBadge]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.Tag]
+foreground = "#FF9AD6"
+
+
+# ------------------------------------------------------------
+# OTHER
+# ------------------------------------------------------------
+
+[highlight.BotBadge]
+foreground = "#FFFFFF"
+background = "#3A2634"
+bold = true
+
+[highlight.CommandName]
+foreground = "#FF66C4"
+
+[highlight.SystemThreadName]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.InlineTimestamp]
+foreground = "#D6D6D6"
+background = "#282828"
+
+[highlight.PollAnswerSelected]
+foreground = "#FF66C4"
+bold = true
+
+[highlight.PollWinner]
+foreground = "#70D6A3"
+bold = true
+
+[highlight.GaugeFill]
+foreground = "#FF66C4"
+
+[highlight.FolderFallback]
+foreground = "#FF66C4"
+
+
+[highlight.RelationshipFriend]
+foreground = "#70D6A3"
+
+[highlight.RelationshipIncoming]
+foreground = "#E0B85A"
+
+[highlight.RelationshipOutgoing]
+foreground = "#E0B85A"
+
+[highlight.RelationshipBlocked]
+foreground = "#FF6B6B"
+
+[highlight.RelationshipNone]
+foreground = "#777777"
+
+[highlight.ReplyPingEnabled]
+foreground = "#FF66C4"
+
+
+# ============================================================
+# UI GEOMETRY
+# ============================================================
+
+[ui.border]
+default = "plain"
+pane = "plain"
+composer = "rounded"
+modal = "rounded"
+picker = "rounded"
+login = "rounded"
+message = "rounded"
+forum = "rounded"
+
+
+# ============================================================
+# VΞRN SELECTION MARKER
+# ============================================================
+
+[ui.indicator]
+selection = "> "
