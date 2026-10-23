@@ -8,6 +8,7 @@ body:
       value: |
         **Before submitting**
         - Search existing issues to avoid duplicates.
+        - **Please add error/debug logs by running concord with [debug mode](https://github.com/chojs23/concord/blob/main/CONTRIBUTING.md#reporting-bugs) when it happens especially voice or stream features.**
         - **Redact tokens, passwords, MFA codes, QR tickets, and raw auth response bodies** from any logs or screenshots you attach.
         - Concord is an unofficial Discord client. Issues asking for self-bot automation, mass actions, or scraping will be closed.
 
@@ -100,7 +101,6 @@ body:
       description: |
         Follow the [debug logging instructions](https://github.com/chojs23/concord/blob/main/CONTRIBUTING.md#reporting-bugs),
         reproduce the issue, and paste the relevant excerpt from `concord.log`.
-        **Redact tokens, passwords, MFA codes, QR tickets, and any raw auth response bodies.**
       render: shell
 
   - type: textarea
