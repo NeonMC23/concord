@@ -110,9 +110,7 @@ use cpal::traits::{DeviceTrait, StreamTrait};
 use futures::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 #[cfg(feature = "voice-playback")]
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU8, AtomicU64, Ordering};
-#[cfg(feature = "voice-playback")]
-use std::sync::{Condvar, Mutex as StdMutex};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use tokio::{
     net::UdpSocket,
     sync::{Mutex, mpsc, watch},
@@ -195,34 +193,26 @@ const DISCORD_TRAILING_SILENCE_FRAMES: usize = 5;
 #[allow(dead_code)]
 const OPUS_MAX_ENCODED_FRAME_BYTES: usize = 4000;
 #[cfg(feature = "voice-playback")]
-const VOICE_MIC_PCM_FRAME_QUEUE: usize = 16;
+const VOICE_MIC_MAX_PROCESSING_DELAY: Duration = Duration::from_millis(500);
 #[cfg(feature = "voice-playback")]
-const VOICE_MIC_MAX_LIVE_FRAMES: usize = 3;
+const VOICE_MIC_SEND_TIMEOUT: Duration = Duration::from_millis(100);
 #[cfg(feature = "voice-playback")]
-const VOICE_MIC_TARGET_BUFFER_DURATION: Duration = Duration::from_millis(40);
+const VOICE_MIC_SERVICE_INTERVAL: Duration = Duration::from_millis(5);
+// Storage covers the processing deadline, one bounded send, and worker scheduling.
 #[cfg(feature = "voice-playback")]
-const VOICE_MIC_MAX_BUFFER_DURATION: Duration = Duration::from_millis(60);
-const VOICE_MIC_HEALTH_SWEEP_INTERVAL: Duration = Duration::from_millis(500);
+const VOICE_MIC_QUEUE_BUDGET: Duration = VOICE_MIC_MAX_PROCESSING_DELAY
+    .saturating_add(VOICE_MIC_SEND_TIMEOUT)
+    .saturating_add(VOICE_MIC_SERVICE_INTERVAL.saturating_mul(2));
 #[cfg(feature = "voice-playback")]
-const VOICE_MIC_UNHEALTHY_CALLBACK_THRESHOLD: u8 = 3;
-#[cfg(feature = "voice-playback")]
-const VOICE_MIC_UNHEALTHY_CALLBACK_WINDOW: Duration = Duration::from_secs(5);
-#[cfg(feature = "voice-playback")]
-const VOICE_MIC_CALLBACK_GAP_FLOOR: Duration = Duration::from_millis(200);
-#[cfg(feature = "voice-playback")]
-const VOICE_MIC_CAPTURE_DELIVERY_BUDGET: Duration = Duration::from_millis(50);
-#[cfg(feature = "voice-playback")]
-const VOICE_MIC_TRANSMIT_WAIT_BUDGET: Duration = DISCORD_OPUS_FRAME_DURATION;
-#[cfg(feature = "voice-playback")]
-const VOICE_MIC_PROCESSING_BUDGET: Duration = Duration::from_millis(10);
-#[cfg(feature = "voice-playback")]
-const VOICE_MIC_MAX_FRAME_AGE: Duration = VOICE_MIC_CAPTURE_DELIVERY_BUDGET
-    .saturating_add(VOICE_MIC_TRANSMIT_WAIT_BUDGET)
-    .saturating_add(VOICE_MIC_PROCESSING_BUDGET);
-#[cfg(feature = "voice-playback")]
-const VOICE_MIC_RECOVERY_MAX_FAILED_SWEEPS: u8 = 3;
-#[cfg(feature = "voice-playback")]
-const VOICE_MIC_RECOVERY_COOLDOWN: Duration = Duration::from_secs(5);
+const VOICE_MIC_PCM_FRAME_QUEUE: usize = VOICE_MIC_QUEUE_BUDGET
+    .as_millis()
+    .div_ceil(DISCORD_OPUS_FRAME_DURATION.as_millis())
+    as usize
+    + 1;
+#[cfg(all(feature = "voice-playback", target_os = "linux"))]
+const VOICE_MIC_AUTOMATIC_CALLBACKS_PER_SECOND: u32 = 20;
+#[cfg(all(feature = "voice-playback", not(target_os = "linux")))]
+const VOICE_MIC_AUTOMATIC_CALLBACKS_PER_SECOND: u32 = 100;
 #[cfg(feature = "voice-playback")]
 const VOICE_TRANSMIT_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 #[cfg(feature = "voice-playback")]
@@ -871,6 +861,8 @@ impl Default for VoiceChildTasks {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct VoiceCaptureGate {
+    // Preserve transmit transitions even when watch coalesces mute and unmute.
+    transmit_epoch: u64,
     capture_enabled: bool,
     transmit_enabled: bool,
     use_voice_activity: bool,
@@ -905,8 +897,6 @@ struct VoiceMicrophoneCapture {
     _stream: cpal::Stream,
     _processor: VoiceMicrophoneInputProcessor,
     stats: Arc<VoiceMicrophoneCaptureStats>,
-    buffer_mode: VoiceMicrophoneBufferMode,
-    recovery: VoiceMicrophoneRecoveryState,
 }
 
 #[cfg(feature = "voice-playback")]
@@ -921,52 +911,16 @@ struct VoiceMicrophoneInputStream {
 
 #[cfg(feature = "voice-playback")]
 struct VoiceMicrophoneInputProcessor {
-    shutdown: Option<Box<dyn FnOnce() + Send>>,
+    stopped: Arc<AtomicBool>,
     worker: Option<std::thread::JoinHandle<()>>,
-}
-
-#[cfg(feature = "voice-playback")]
-struct VoiceMicrophoneInputChunk<T> {
-    samples: Vec<T>,
-    captured_at: Instant,
-    timing: VoiceMicrophoneCaptureTiming,
-}
-
-#[cfg(feature = "voice-playback")]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct VoiceMicrophoneCaptureTiming {
-    input_dropped: bool,
-    timeline_adjustment_us: i64,
-    callback_unhealthy: bool,
-}
-
-#[cfg(feature = "voice-playback")]
-struct VoiceMicrophoneInputHandoff<T> {
-    state: StdMutex<VoiceMicrophoneInputHandoffState<T>>,
-    wake: Condvar,
-    input_dropped: AtomicBool,
-}
-
-#[cfg(feature = "voice-playback")]
-struct VoiceMicrophoneInputHandoffState<T> {
-    pending: Option<VoiceMicrophoneInputChunk<T>>,
-    stopped: bool,
 }
 
 #[cfg(feature = "voice-playback")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum VoiceMicrophoneBufferMode {
-    HostDefault,
-    AutomaticFixed(MicrophoneBufferMs),
+    PlatformFixed,
     UserFixed(MicrophoneBufferMs),
-}
-
-#[cfg(feature = "voice-playback")]
-#[derive(Default)]
-struct VoiceMicrophoneRecoveryState {
-    failed_sweeps: u8,
-    retry_not_before: Option<Instant>,
-    exhausted: bool,
+    HostDefaultFallback,
 }
 
 #[cfg(feature = "voice-playback")]
@@ -978,13 +932,18 @@ struct VoiceMicrophonePcmFrames {
     output_pending: Vec<i16>,
     output_pending_at: Option<Instant>,
     next_source_frame: f64,
+    source_end: Option<Instant>,
+    generation: Arc<AtomicBool>,
 }
 
 #[cfg(feature = "voice-playback")]
 #[derive(Debug)]
 struct VoiceMicrophoneFrame {
     samples: Vec<i16>,
+    // The oldest sample, including time spent in the audio backend.
     captured_at: Instant,
+    // Either stage can retire all queued and partial audio from this generation.
+    generation: Arc<AtomicBool>,
 }
 
 #[cfg(feature = "voice-playback")]
@@ -1000,16 +959,12 @@ struct VoiceMicrophoneCaptureStats {
     clipped_samples: AtomicU64,
     last_callback_elapsed_us: AtomicU64,
     max_callback_gap_ms: AtomicU64,
-    callback_handoff_drops: AtomicU64,
+    input_queue_dropped_blocks: AtomicU64,
+    stale_input_blocks: AtomicU64,
     stream_errors: AtomicU64,
     stream_xruns: AtomicU64,
-    last_capture_end_offset_us: AtomicI64,
-    max_capture_clock_adjustment_us: AtomicU64,
     max_capture_latency_us: AtomicU64,
     max_capture_delivery_age_us: AtomicU64,
-    unhealthy_callback_count: AtomicU8,
-    unhealthy_callback_window_started_us: AtomicU64,
-    restart_requested: AtomicBool,
 }
 
 #[cfg(feature = "voice-playback")]
@@ -1129,14 +1084,10 @@ impl VoiceChildTasks {
     #[cfg(feature = "voice-playback")]
     fn signal_udp_transmit_stop(&mut self) {
         if let Some(gate) = self.transmit_gate.as_ref() {
-            let _ = gate.send(VoiceCaptureGate {
-                capture_enabled: false,
-                transmit_enabled: false,
-                use_voice_activity: true,
-                noise_suppression: false,
-                microphone_buffer_ms: None,
-                microphone_sensitivity: MicrophoneSensitivityDb::default(),
-                microphone_volume: VoiceVolumePercent::default(),
+            gate.send_modify(|current| {
+                current.transmit_epoch = current.transmit_epoch.wrapping_add(1);
+                current.capture_enabled = false;
+                current.transmit_enabled = false;
             });
         }
         self.microphone_capture = None;
@@ -1247,9 +1198,6 @@ impl VoiceChildTasks {
                     }
                 }
                 (Some(samples_tx), true, true) => {
-                    if let Some(capture) = self.microphone_capture.as_mut() {
-                        capture.reset_recovery();
-                    }
                     logging::debug(
                         "voice",
                         "starting replacement voice microphone capture for new buffer setting",
@@ -1292,7 +1240,13 @@ impl VoiceChildTasks {
         #[cfg(feature = "voice-playback")]
         {
             if let Some(gate) = self.transmit_gate.as_ref() {
-                let _ = gate.send(capture_gate);
+                gate.send_modify(|current| {
+                    let epoch = current.transmit_epoch.wrapping_add(u64::from(
+                        current.transmit_enabled != capture_gate.transmit_enabled,
+                    ));
+                    *current = capture_gate;
+                    current.transmit_epoch = epoch;
+                });
             }
             self.set_microphone_capture_enabled(
                 capture_gate.capture_enabled,
@@ -1321,74 +1275,6 @@ impl VoiceChildTasks {
         }
     }
 
-    fn maintain_microphone_capture_health(&mut self) {
-        #[cfg(feature = "voice-playback")]
-        {
-            let recovery_started_at = Instant::now();
-            let (Some(capture), Some(samples_tx)) = (
-                self.microphone_capture.as_mut(),
-                self.microphone_pcm_tx.as_ref(),
-            ) else {
-                return;
-            };
-            let candidates = capture.take_restart_buffers(recovery_started_at);
-            if candidates.is_empty() {
-                return;
-            }
-
-            let mut failures = Vec::new();
-            for next_buffer in candidates {
-                logging::debug(
-                    "voice",
-                    format!(
-                        "voice microphone callback timing is unhealthy, retrying with {}ms fixed buffer",
-                        next_buffer.value(),
-                    ),
-                );
-                match VoiceMicrophoneCapture::start_automatic_fixed(
-                    samples_tx.clone(),
-                    self.microphone_source.as_deref(),
-                    next_buffer,
-                ) {
-                    Ok(capture) => {
-                        self.microphone_capture = Some(capture);
-                        logging::debug(
-                            "voice",
-                            format!(
-                                "replaced unhealthy voice microphone capture with {}ms compatibility buffer",
-                                next_buffer.value(),
-                            ),
-                        );
-                        return;
-                    }
-                    Err(error) => failures.push(format!("{}ms: {error}", next_buffer.value())),
-                }
-            }
-            let exhausted = self
-                .microphone_capture
-                .as_mut()
-                .is_some_and(|capture| capture.record_failed_recovery(Instant::now()));
-            let retry_status = if exhausted {
-                format!(
-                    "automatic recovery exhausted after {} failed sweeps",
-                    VOICE_MIC_RECOVERY_MAX_FAILED_SWEEPS,
-                )
-            } else {
-                format!(
-                    "next retry is delayed by {}ms",
-                    VOICE_MIC_RECOVERY_COOLDOWN.as_millis(),
-                )
-            };
-            logging::error(
-                "voice",
-                format!(
-                    "voice microphone compatibility buffers failed, previous capture remains active, {retry_status}: {}",
-                    failures.join("; "),
-                ),
-            );
-        }
-    }
-
     fn set_voice_audio_sources(
         &mut self,
         sources: VoiceAudioSources,
@@ -1398,9 +1284,6 @@ impl VoiceChildTasks {
         {
             let mut errors = Vec::new();
             if self.microphone_source != sources.input {
-                if let Some(capture) = self.microphone_capture.as_mut() {
-                    capture.reset_recovery();
-                }
                 if let Some(samples_tx) = self.microphone_pcm_tx.clone()
                     && (self.microphone_capture.is_some() || capture_gate.capture_enabled)
                 {

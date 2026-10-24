@@ -3,6 +3,20 @@ use super::*;
 type DisplayOptionChange = fn(DisplayOptions) -> DisplayOptions;
 
 #[test]
+fn saving_display_options_preserves_configured_safety() {
+    let mut state = state_with_messages(1);
+    let safety = crate::config::SafetyOptions { enabled: false };
+    state.apply_safety_options(safety);
+    state.open_options_popup();
+    handle_key(&mut state, key(KeyCode::Enter));
+
+    let saved = state
+        .take_options_save_request()
+        .expect("display change saves options");
+    assert_eq!(saved.safety, safety);
+}
+
+#[test]
 fn every_display_option_changes_only_its_own_setting() {
     let cases: [(&str, DisplayOptionChange); 10] = [
         ("disable image preview", |mut options| {
@@ -66,11 +80,14 @@ fn every_display_option_changes_only_its_own_setting() {
             Some(AppOptions {
                 display: state.display_options(),
                 composer: state.composer_options(),
+                safety: Default::default(),
                 reactions: Default::default(),
                 credentials: Default::default(),
                 notifications: state.notification_options(),
                 voice: state.voice_options(),
                 presence: Default::default(),
+                translation: Default::default(),
+                klipy: Default::default(),
             }),
             "{label}"
         );
@@ -129,11 +146,14 @@ fn options_popup_h_l_adjust_microphone_sensitivity_by_one_or_ten_db() {
         Some(AppOptions {
             display: state.display_options(),
             composer: state.composer_options(),
+            safety: Default::default(),
             reactions: Default::default(),
             credentials: Default::default(),
             notifications: state.notification_options(),
             voice: state.voice_options(),
             presence: Default::default(),
+            translation: Default::default(),
+            klipy: Default::default(),
         })
     );
 }
@@ -296,11 +316,14 @@ fn options_popup_sequences_own_continuations_then_restore_fixed_shortcuts() {
         Some(AppOptions {
             display: state.display_options(),
             composer: state.composer_options(),
+            safety: Default::default(),
             reactions: Default::default(),
             credentials: Default::default(),
             notifications: state.notification_options(),
             voice: state.voice_options(),
             presence: Default::default(),
+            translation: Default::default(),
+            klipy: Default::default(),
         })
     );
 }

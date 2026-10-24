@@ -124,6 +124,7 @@ define_modal_popups! {
     MessageConfirmation(MessageConfirmationState),
     QuitConfirmation,
     GuildLeaveConfirmation(GuildLeaveConfirmationState),
+    GroupLeaveConfirmation(GroupLeaveConfirmationState),
     Options(OptionsPopupState),
     AttachmentViewer(AttachmentViewerState),
     UserProfile(UserProfilePopupState),
@@ -135,6 +136,7 @@ define_modal_popups! {
     ChannelSwitcher(ChannelSwitcherState),
     NotificationInbox(NotificationInboxState),
     Search(SearchPopupState),
+    GifPicker(super::gif_picker::GifPickerState),
     ForumPostComposer(ForumPostComposerState),
     ThreadEdit(ThreadEditState),
     ThreadActionMenu(ThreadActionMenuState),
@@ -251,6 +253,7 @@ pub(in crate::tui) enum SelectablePopupTarget {
     VoiceParticipantAudio,
     SearchResults,
     SearchSuggestions,
+    GifResults,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -648,6 +651,12 @@ pub struct GuildLeaveConfirmationState {
     pub(super) name: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct GroupLeaveConfirmationState {
+    pub(super) channel_id: Id<ChannelMarker>,
+    pub(super) name: String,
+}
+
 /// Confirmation gate before permanently deleting a thread. Carries the thread
 /// id to delete, its display name for the prompt, and whether it is a forum post
 /// so the prompt reads "post" instead of "thread".
@@ -852,6 +861,31 @@ impl UserProfileSettingsState {
                     self.selected_guild - 1
                 };
             }
+        }
+    }
+
+    pub(super) fn select_field(&mut self, field: UserProfileSettingsField) -> bool {
+        let (fields, actions, selected) = match self.tab {
+            UserProfileSettingsTab::Global => (
+                Self::GLOBAL_FIELDS.as_slice(),
+                Self::GLOBAL_ACTIONS.as_slice(),
+                &mut self.selected_global,
+            ),
+            UserProfileSettingsTab::Guild => (
+                Self::GUILD_FIELDS.as_slice(),
+                Self::GUILD_ACTIONS.as_slice(),
+                &mut self.selected_guild,
+            ),
+        };
+        let index = fields
+            .iter()
+            .chain(actions)
+            .position(|candidate| *candidate == field);
+        if let Some(index) = index {
+            *selected = index;
+            true
+        } else {
+            false
         }
     }
 
@@ -1380,6 +1414,17 @@ impl PopupUiState {
         take_modal_state!(self, GuildLeaveConfirmation, confirmation)
     }
 
+    pub(super) fn group_leave_confirmation(&self) -> Option<&GroupLeaveConfirmationState> {
+        match &self.modal {
+            Some(ModalPopup::GroupLeaveConfirmation(confirmation)) => Some(confirmation),
+            _ => None,
+        }
+    }
+
+    pub(super) fn take_group_leave_confirmation(&mut self) -> Option<GroupLeaveConfirmationState> {
+        take_modal_state!(self, GroupLeaveConfirmation, confirmation)
+    }
+
     pub(super) fn thread_delete_confirmation(&self) -> Option<&ThreadDeleteConfirmationState> {
         match &self.modal {
             Some(ModalPopup::ThreadDeleteConfirmation(confirmation)) => Some(confirmation),
@@ -1688,6 +1733,35 @@ impl DashboardState {
         self.popups.confirmation_button = self.popups.confirmation_button.next();
     }
 
+    pub(in crate::tui) fn activate_confirmation_button(
+        &mut self,
+        button: ConfirmationButton,
+    ) -> Option<AppCommand> {
+        self.popups.confirmation_button = button;
+        if button == ConfirmationButton::Cancel {
+            self.close_active_popup();
+            return None;
+        }
+
+        match self.active_modal_popup_kind()? {
+            ActiveModalPopupKind::MessageConfirmation => self.confirm_message_confirmation(),
+            ActiveModalPopupKind::LongMessageConfirmation => self.confirm_long_message_upload(),
+            ActiveModalPopupKind::QuitConfirmation => {
+                self.confirm_quit();
+                None
+            }
+            ActiveModalPopupKind::GuildLeaveConfirmation => self.confirm_guild_leave(),
+            ActiveModalPopupKind::GroupLeaveConfirmation => self.confirm_group_leave(),
+            ActiveModalPopupKind::ThreadDeleteConfirmation => self.confirm_thread_delete(),
+            ActiveModalPopupKind::NotificationInbox
+                if self.notification_inbox_is_confirming_mark_all() =>
+            {
+                self.confirm_mark_all_notification_inbox_read()
+            }
+            _ => None,
+        }
+    }
+
     /// Closes the topmost popup layer using that popup's own back or cancel
     /// behavior. Raw close keys and configured `ClosePopup` bindings both use
     /// this path so nested popup state cannot behave differently by key source.
@@ -1718,6 +1792,9 @@ impl DashboardState {
             ActiveModalPopupKind::GuildLeaveConfirmation => {
                 self.close_guild_leave_confirmation();
             }
+            ActiveModalPopupKind::GroupLeaveConfirmation => {
+                self.close_group_leave_confirmation();
+            }
             ActiveModalPopupKind::Options if self.is_capturing_push_to_talk_shortcut() => {
                 self.cancel_push_to_talk_shortcut_capture();
             }
@@ -1741,6 +1818,10 @@ impl DashboardState {
             }
             ActiveModalPopupKind::NotificationInbox => self.close_notification_inbox(),
             ActiveModalPopupKind::Search => self.close_search_popup(),
+            ActiveModalPopupKind::GifPicker if self.is_gif_query_editing() => {
+                self.stop_gif_query_editing();
+            }
+            ActiveModalPopupKind::GifPicker => self.popups.clear_modal(),
             ActiveModalPopupKind::ForumPostComposer => {
                 self.close_or_cancel_forum_post_composer();
             }
@@ -2014,6 +2095,13 @@ impl DashboardState {
             ModalPopup::NotificationInbox(_) => {
                 ActivePopupPolicy::selectable(kind, SelectablePopupTarget::NotificationInbox)
             }
+            ModalPopup::GifPicker(picker) if picker.query_editing => ActivePopupPolicy::text_entry(
+                kind,
+                ActivePopupInteraction::SelectableList(SelectablePopupTarget::GifResults),
+            ),
+            ModalPopup::GifPicker(_) => {
+                ActivePopupPolicy::selectable(kind, SelectablePopupTarget::GifResults)
+            }
             ModalPopup::Search(_) => ActivePopupPolicy::text_entry(
                 kind,
                 ActivePopupInteraction::Custom(CustomPopupTarget::Search),
@@ -2050,6 +2138,7 @@ impl DashboardState {
             ModalPopup::MessageConfirmation(_)
             | ModalPopup::QuitConfirmation
             | ModalPopup::GuildLeaveConfirmation(_)
+            | ModalPopup::GroupLeaveConfirmation(_)
             | ModalPopup::ThreadDeleteConfirmation(_) => ActivePopupPolicy::confirmation(kind),
             ModalPopup::AttachmentViewer(_) => {
                 ActivePopupPolicy::routed(kind, ActivePopupInteraction::NoNavigation)
@@ -2191,6 +2280,10 @@ impl DashboardState {
             SelectablePopupTarget::SearchResults | SelectablePopupTarget::SearchSuggestions => {
                 self.popups.search_popup()?.selectable_state(target)?
             }
+            SelectablePopupTarget::GifResults => {
+                let picker = self.gif_picker()?;
+                (&picker.selection, picker.results.len())
+            }
         })
     }
 
@@ -2284,10 +2377,18 @@ impl DashboardState {
             SelectablePopupTarget::SearchResults | SelectablePopupTarget::SearchSuggestions => {
                 self.activate_search_popup()
             }
+            SelectablePopupTarget::GifResults => {
+                self.confirm_gif_selection();
+                None
+            }
         }
     }
 
     fn page_selectable_popup(&mut self, target: SelectablePopupTarget, action: SelectionAction) {
+        if target == SelectablePopupTarget::GifResults {
+            self.page_gif_selection(action);
+            return;
+        }
         self.update_selectable_popup(target, |selection, len| {
             selection.page(len, action);
         });
@@ -2323,6 +2424,10 @@ impl DashboardState {
     }
 
     fn move_selectable_popup(&mut self, target: SelectablePopupTarget, action: SelectionAction) {
+        if target == SelectablePopupTarget::GifResults {
+            self.move_gif_selection(action);
+            return;
+        }
         self.update_selectable_popup(target, |selection, len| match action {
             SelectionAction::Next => selection.move_down(len),
             SelectionAction::Previous => selection.move_up(),
@@ -2331,6 +2436,9 @@ impl DashboardState {
     }
 
     fn after_selectable_popup_selection_changed(&mut self, target: SelectablePopupTarget) {
+        if target == SelectablePopupTarget::GifResults {
+            self.focus_gif_result();
+        }
         if target == SelectablePopupTarget::NotificationInbox {
             self.ensure_notification_inbox_requests();
         }
@@ -2458,6 +2566,11 @@ impl DashboardState {
                     .and_then(|search| search.selectable_state_mut(target))
                 {
                     update(selection, len);
+                }
+            }
+            SelectablePopupTarget::GifResults => {
+                if let Some(picker) = self.gif_picker_mut() {
+                    update(&mut picker.selection, picker.results.len());
                 }
             }
         }

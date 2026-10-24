@@ -16,6 +16,235 @@ use serde_json::json;
 
 const PERM_ATTACH_FILES: u64 = 0x0000_0000_0000_8000;
 
+fn enable_composer_translation(state: &mut DashboardState) {
+    state.apply_translation_options(crate::config::TranslationOptions {
+        provider: Some(crate::config::TranslationProviderKind::LibreTranslate),
+        composer_target_language: Some("en".to_owned()),
+        ..Default::default()
+    });
+}
+
+fn composer_with_translation() -> DashboardState {
+    let mut state = state_with_writable_channel();
+    enable_composer_translation(&mut state);
+    state.start_composer();
+    state.insert_composer_text_at_cursor("안녕하세요");
+    state
+}
+
+#[test]
+fn composer_translation_preserves_edited_drafts_and_retranslates_changed_original() {
+    let mut state = composer_with_translation();
+    let request_id = match state
+        .translate_composer_input()
+        .expect("configured translation should emit a command")
+    {
+        AppCommand::Translate {
+            request_id,
+            target: crate::discord::TranslationTarget::Composer,
+            target_language,
+            content,
+        } => {
+            assert_eq!(target_language, "en");
+            assert_eq!(content, "안녕하세요");
+            request_id
+        }
+        command => panic!("unexpected command: {command:?}"),
+    };
+    assert!(state.composer_translation_pending());
+    state.push_event(AppEvent::TranslationCompleted {
+        request_id,
+        target: crate::discord::TranslationTarget::Composer,
+        translated_text: "hello".to_owned(),
+    });
+
+    assert!(!state.composer_translation_pending());
+    assert_eq!(state.composer_input(), "hello");
+    assert_eq!(state.composer_translation_original(), Some("안녕하세요"));
+    assert_eq!(
+        state.toast_message().map(|toast| toast.text),
+        Some("Composer translated")
+    );
+
+    state.insert_composer_text_at_cursor("!");
+    assert_eq!(state.translate_composer_input(), None);
+    assert_eq!(state.composer_input(), "안녕하세요");
+    assert_eq!(state.composer_translation_original(), None);
+
+    assert_eq!(state.translate_composer_input(), None);
+    assert_eq!(state.composer_input(), "hello!");
+    assert_eq!(state.composer_translation_original(), Some("안녕하세요"));
+
+    assert_eq!(state.translate_composer_input(), None);
+    assert_eq!(state.composer_input(), "안녕하세요");
+
+    state.insert_composer_text_at_cursor(" 세계");
+    let request_id = match state
+        .translate_composer_input()
+        .expect("an edited original should be translated again")
+    {
+        AppCommand::Translate {
+            request_id,
+            target: crate::discord::TranslationTarget::Composer,
+            target_language,
+            content,
+        } => {
+            assert_eq!(target_language, "en");
+            assert_eq!(content, "안녕하세요 세계");
+            request_id
+        }
+        command => panic!("unexpected command: {command:?}"),
+    };
+    assert_eq!(state.composer_input(), "안녕하세요 세계");
+    assert!(state.composer_translation_pending());
+
+    state.push_event(AppEvent::TranslationCompleted {
+        request_id,
+        target: crate::discord::TranslationTarget::Composer,
+        translated_text: "hello world".to_owned(),
+    });
+
+    assert!(!state.composer_translation_pending());
+    assert_eq!(state.composer_input(), "hello world");
+    assert_eq!(
+        state.composer_translation_original(),
+        Some("안녕하세요 세계")
+    );
+
+    // Confirmed mentions and custom emoji keep their Discord wire semantics
+    // while only the surrounding natural language is sent through translation.
+    let mut semantic = state_with_writable_channel_and_members();
+    enable_composer_translation(&mut semantic);
+    semantic.push_event(AppEvent::CurrentUserCapabilities {
+        premium_tier: PremiumTier::Nitro,
+    });
+    semantic.push_event(AppEvent::GuildEmojisUpdate {
+        guild_id: Id::new(1),
+        emojis: vec![CustomEmojiInfo {
+            animated: true,
+            ..CustomEmojiInfo::test(Id::new(50), "party_time")
+        }],
+    });
+    semantic.start_composer();
+    semantic.push_composer_char('@');
+    semantic.push_composer_char('s');
+    assert!(semantic.confirm_composer_mention());
+    for ch in ":pa".chars() {
+        semantic.push_composer_char(ch);
+    }
+    assert!(semantic.confirm_composer_emoji());
+    semantic.insert_composer_text_at_cursor("안녕하세요");
+
+    let (request_id, provider_text) = match semantic
+        .translate_composer_input()
+        .expect("semantic composer translation should emit a command")
+    {
+        AppCommand::Translate {
+            request_id,
+            target: crate::discord::TranslationTarget::Composer,
+            content,
+            ..
+        } => (request_id, content),
+        command => panic!("unexpected command: {command:?}"),
+    };
+    assert!(!provider_text.contains("@Sally"));
+    assert!(!provider_text.contains(":party_time:"));
+    semantic.push_event(AppEvent::TranslationCompleted {
+        request_id,
+        target: crate::discord::TranslationTarget::Composer,
+        translated_text: provider_text.replace("안녕하세요", "hello"),
+    });
+
+    assert_eq!(semantic.composer_input(), "@Sally :party_time: hello");
+    let submitted = semantic
+        .submit_composer()
+        .expect("translated semantic draft should submit");
+    match submitted {
+        AppCommand::SendMessage { content, .. } => {
+            assert_eq!(content, "<@20> <a:party_time:50> hello");
+        }
+        command => panic!("unexpected command: {command:?}"),
+    }
+
+    let mut slash_command = composer_with_translation();
+    slash_command.replace_composer_input("/nick translated".to_owned());
+    assert_eq!(slash_command.translate_composer_input(), None);
+    assert_eq!(
+        slash_command.toast_message().map(|toast| toast.text),
+        Some("slash command drafts cannot be translated")
+    );
+
+    let mut cancelled = composer_with_translation();
+    cancelled.drain_pending_commands();
+    let request_id = match cancelled
+        .translate_composer_input()
+        .expect("translation should start before composer closes")
+    {
+        AppCommand::Translate { request_id, .. } => request_id,
+        command => panic!("unexpected command: {command:?}"),
+    };
+    cancelled.close_composer();
+    assert_eq!(
+        cancelled.drain_pending_commands(),
+        vec![AppCommand::CancelComposerTranslation { request_id }]
+    );
+}
+
+#[test]
+fn composer_translation_does_not_overwrite_newer_edits() {
+    let mut state = composer_with_translation();
+    state.drain_pending_commands();
+    let command = state
+        .translate_composer_input()
+        .expect("configured translation should emit a command");
+    let request_id = match command {
+        AppCommand::Translate { request_id, .. } => request_id,
+        command => panic!("unexpected command: {command:?}"),
+    };
+    assert!(state.composer_translation_pending());
+    state.insert_composer_text_at_cursor(" 세계");
+    assert!(!state.composer_translation_pending());
+    assert_eq!(
+        state.drain_pending_commands(),
+        vec![AppCommand::CancelComposerTranslation { request_id }]
+    );
+
+    state.push_event(AppEvent::TranslationCompleted {
+        request_id,
+        target: crate::discord::TranslationTarget::Composer,
+        translated_text: "hello".to_owned(),
+    });
+
+    assert_eq!(state.composer_input(), "안녕하세요 세계");
+    assert!(state.toast_message().is_none());
+}
+
+#[test]
+fn composer_translation_failure_preserves_the_draft_and_shows_an_error() {
+    let mut state = composer_with_translation();
+    let command = state
+        .translate_composer_input()
+        .expect("configured translation should emit a command");
+    let request_id = match command {
+        AppCommand::Translate { request_id, .. } => request_id,
+        command => panic!("unexpected command: {command:?}"),
+    };
+    assert!(state.composer_translation_pending());
+
+    state.push_event(AppEvent::TranslationFailed {
+        request_id,
+        target: crate::discord::TranslationTarget::Composer,
+        message: "service unavailable".to_owned(),
+    });
+
+    assert!(!state.composer_translation_pending());
+    assert_eq!(state.composer_input(), "안녕하세요");
+    assert_eq!(
+        state.toast_message().map(|toast| toast.text),
+        Some("Composer translation failed: service unavailable")
+    );
+}
+
 #[test]
 fn slow_mode_locks_composer_for_live_and_cached_self_messages() {
     let mut state = state_with_writable_channel();
@@ -174,6 +403,142 @@ fn state_with_application_command(command: ApplicationCommandInfo) -> DashboardS
     });
     state.start_composer();
     state
+}
+
+#[test]
+fn safety_option_controls_account_risk_locks() {
+    let dm_state = |last_message_id, is_spam, is_message_request| {
+        let mut state = DashboardState::new();
+        state.push_event(AppEvent::Ready {
+            user: "me".to_owned(),
+            user_id: Some(Id::new(1)),
+        });
+        state.push_event(AppEvent::ChannelUpsert(ChannelInfo {
+            last_message_id,
+            is_spam,
+            is_message_request,
+            ..dm_channel_info(Id::new(20), "alice")
+        }));
+        state.confirm_selected_guild();
+        state.confirm_selected_channel();
+        state.push_event(latest_history_loaded(Id::new(20), Vec::new()));
+        state
+    };
+    let mut empty_guild = guild_state_with_overwrites(Vec::new(), None);
+    empty_guild.push_event(latest_history_loaded(Id::new(2), Vec::new()));
+    let mut onboarding = state_with_writable_channel();
+    apply_incomplete_community_onboarding(&mut onboarding, Id::new(1), Id::new(10));
+
+    let cases = [
+        ("empty guild channel", empty_guild),
+        ("guild onboarding", onboarding),
+        ("empty DM", dm_state(None, None, None)),
+        (
+            "new DM conversation",
+            dm_state(Some(Id::new(200)), None, None),
+        ),
+        ("spam DM", dm_state(None, Some(true), None)),
+        ("message-request DM", dm_state(None, None, Some(true))),
+    ];
+
+    for (label, mut state) in cases {
+        assert!(state.composer_lock().is_some(), "{label}");
+        state.discord.cache.set_safety_checks_enabled(false);
+
+        assert_eq!(state.composer_lock(), None, "{label}");
+        assert!(state.can_send_in_selected_channel(), "{label}");
+        state.start_composer();
+        assert!(state.is_composing(), "{label}");
+        state.replace_composer_input("hello".to_owned());
+        assert!(
+            matches!(
+                state.submit_composer(),
+                Some(AppCommand::SendMessage { .. })
+            ),
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn history_loading_and_failure_locks_stay_active_when_safety_is_disabled() {
+    let loading = guild_state_with_overwrites(Vec::new(), None);
+    let mut failed = guild_state_with_overwrites(Vec::new(), None);
+    failed.push_event(AppEvent::MessageHistoryLoadFailed {
+        channel_id: Id::new(2),
+        target: crate::discord::MessageHistoryLoadTarget::Latest,
+        message: "offline".to_owned(),
+    });
+
+    for (mut state, expected) in [
+        (loading, ComposerLock::LoadingMessages),
+        (failed, ComposerLock::MessageLoadFailed),
+    ] {
+        state.discord.cache.set_safety_checks_enabled(false);
+
+        assert_eq!(state.composer_lock(), Some(expected));
+        state.start_composer();
+        assert!(!state.is_composing());
+    }
+}
+
+#[test]
+fn slow_mode_locks_stay_active_when_safety_is_disabled() {
+    for kind in ["guild", "forum", "dm"] {
+        for rate_limited in [false, true] {
+            let mut state = match kind {
+                "guild" => state_with_writable_channel(),
+                "forum" => state_with_forum_post_channel(false),
+                "dm" => {
+                    let mut state = state_with_direct_messages();
+                    state.confirm_selected_guild();
+                    state.confirm_selected_channel();
+                    state.push_event(latest_history_loaded(Id::new(20), Vec::new()));
+                    state
+                }
+                _ => unreachable!("all channel kinds are listed"),
+            };
+            let case = format!("{kind}, rate_limited={rate_limited}");
+            let channel_id = state.selected_channel_id().expect("channel is selected");
+            state.discord.cache.set_safety_checks_enabled(false);
+            state.start_composer();
+            assert!(
+                state.is_composing() || state.is_forum_post_composer_active(),
+                "{case}"
+            );
+
+            state.push_effect(if rate_limited {
+                AppEvent::MessageSendRateLimited {
+                    channel_id,
+                    retry_after_millis: 1_500,
+                }
+            } else {
+                AppEvent::MessageSendCooldownStarted {
+                    channel_id,
+                    duration_millis: 1_500,
+                }
+            });
+
+            assert!(
+                matches!(state.slow_mode_remaining_seconds(channel_id), Some(1..=2)),
+                "{case}"
+            );
+            assert!(
+                matches!(state.composer_lock(), Some(ComposerLock::SlowMode { .. })),
+                "{case}"
+            );
+            if kind == "forum" {
+                assert!(!state.can_create_post_in_selected_channel(), "{case}");
+                state.close_forum_post_composer();
+                state.start_composer();
+                assert!(!state.is_forum_post_composer_active(), "{case}");
+            } else {
+                assert!(!state.is_composing(), "{case}");
+                state.start_composer();
+                assert!(!state.is_composing(), "{case}");
+            }
+        }
+    }
 }
 
 #[test]

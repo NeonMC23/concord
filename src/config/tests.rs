@@ -6,8 +6,9 @@ use super::{
     AnimatePreviews, AppOptions, BorderShape, BorderSurface, ComposerOptions, CredentialOptions,
     CredentialStoreMode, DisplayOptions, HighlightGroup, ImagePreviewQualityPreset,
     ImageProtocolPreference, KeymapBinding, KeymapOptions, NotificationOptions, PresenceOptions,
-    ThemeOptions, VoiceOptions, load_keymap_options_from_path, load_options_from_path,
-    parse_app_options, parse_theme_options, save_options_to_path,
+    SafetyOptions, ThemeOptions, TranslationOptions, TranslationProviderKind, VoiceOptions,
+    load_keymap_options_from_path, load_options_from_path, parse_app_options, parse_theme_options,
+    save_options_to_path,
 };
 use crate::discord::{
     MicrophoneBufferMs, MicrophoneSensitivityDb, VoiceParticipantVolumePercent, VoiceVolumePercent,
@@ -131,6 +132,25 @@ fn app_options_with(update: impl FnOnce(&mut AppOptions)) -> AppOptions {
     let mut options = AppOptions::default();
     update(&mut options);
     options
+}
+
+#[test]
+fn safety_checks_default_to_enabled_and_follow_config() {
+    assert!(SafetyOptions::default().enabled);
+
+    for (content, enabled) in [
+        ("", true),
+        ("[safety]\n", true),
+        ("[safety]\nenabled = true\n", true),
+        ("[safety]\nenabled = false\n", false),
+    ] {
+        let direct: AppOptions = toml::from_str(content).expect("safety config parses");
+        let (loaded, warnings) = parse_app_options(content).expect("safety config loads");
+
+        assert_eq!(direct.safety.enabled, enabled, "{content}");
+        assert_eq!(loaded.safety, direct.safety, "{content}");
+        assert!(warnings.is_empty(), "{content}");
+    }
 }
 
 #[test]
@@ -592,9 +612,49 @@ fn voice_audio_sources_default_to_system_and_preserve_selected_device_ids() {
 }
 
 #[test]
+fn translation_options_parse_supported_providers_and_redact_secrets() {
+    for (name, expected) in [
+        ("deepl", TranslationProviderKind::DeepL),
+        ("libretranslate", TranslationProviderKind::LibreTranslate),
+    ] {
+        let (options, warnings) = parse_app_options(&format!(
+            "[translation]\nprovider = \"{name}\"\nmessage_target_language = \"ko\"\ncomposer_target_language = \"en\"\nendpoint = \"http://127.0.0.1:5000/translate\"\napi_key = \"config-secret\"\napi_key_env = \"TRANSLATION_KEY\"\n"
+        ))
+        .expect("translation config should parse");
+
+        assert!(warnings.is_empty(), "{name}: {warnings:?}");
+        assert_eq!(options.translation.provider, Some(expected));
+        assert_eq!(
+            options.translation.message_target_language.as_deref(),
+            Some("ko")
+        );
+        assert_eq!(
+            options.translation.composer_target_language.as_deref(),
+            Some("en")
+        );
+        assert_eq!(
+            options.translation.endpoint.as_deref(),
+            Some("http://127.0.0.1:5000/translate")
+        );
+        assert_eq!(
+            options.translation.api_key.as_deref(),
+            Some("config-secret")
+        );
+        assert_eq!(
+            options.translation.api_key_env.as_deref(),
+            Some("TRANSLATION_KEY")
+        );
+        let debug = format!("{:?}", options.translation);
+        assert!(!debug.contains("config-secret"));
+        assert!(debug.contains("[REDACTED]"));
+    }
+}
+
+#[test]
 fn options_save_and_load_round_trip() {
     let (_directory, path) = test_file_path("config.toml");
     let options = AppOptions {
+        klipy: Default::default(),
         display: DisplayOptions {
             disable_image_preview: true,
             show_avatars: false,
@@ -612,6 +672,7 @@ fn options_save_and_load_round_trip() {
             emojis_as_links: true,
             ping_on_reply: false,
         },
+        safety: SafetyOptions { enabled: false },
         reactions: Default::default(),
         credentials: CredentialOptions {
             store: CredentialStoreMode::Plain,
@@ -639,6 +700,14 @@ fn options_save_and_load_round_trip() {
         },
         presence: PresenceOptions {
             share_rich_presence: false,
+        },
+        translation: TranslationOptions {
+            provider: Some(TranslationProviderKind::LibreTranslate),
+            message_target_language: Some("ko".to_owned()),
+            composer_target_language: Some("en".to_owned()),
+            endpoint: Some("http://127.0.0.1:5000/translate".to_owned()),
+            api_key: Some("config-secret".to_owned()),
+            api_key_env: None,
         },
     };
 
@@ -742,4 +811,19 @@ fn reaction_favorite_emojis_default_empty() {
         parse_app_options("[display]\n").expect("empty reactions should use defaults");
     assert!(options.reactions.favorite_emojis.is_empty());
     assert!(warnings.is_empty());
+}
+
+#[test]
+fn klipy_config_round_trips_and_redacts_key() {
+    let (options, warnings) = super::parse::parse_app_options(
+        "[klipy]\napi_key = 'secret-klipy-key'\napi_key_env = 'MY_KLIPY_KEY'\n",
+    )
+    .unwrap();
+    assert!(warnings.is_empty());
+    assert_eq!(options.klipy.api_key.as_deref(), Some("secret-klipy-key"));
+    assert_eq!(options.klipy.api_key_env.as_deref(), Some("MY_KLIPY_KEY"));
+    assert!(!format!("{options:?}").contains("secret-klipy-key"));
+    let round_trip: AppOptions = toml::from_str(&toml::to_string(&options).unwrap()).unwrap();
+    assert_eq!(round_trip, options);
+    assert!(AppOptions::default().klipy.api_key.is_none());
 }

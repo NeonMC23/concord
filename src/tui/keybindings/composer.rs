@@ -67,6 +67,11 @@ macro_rules! define_composer_actions {
 }
 
 define_composer_actions! {
+    OpenGifPicker => (
+        aliases: [],
+        action: ComposerAction::OpenGifPicker,
+        defaults: vec![ctrl_chord('g')]
+    ),
     OpenEditor => (
         aliases: ["OpenInEditor"],
         action: ComposerAction::OpenInEditor,
@@ -106,6 +111,11 @@ define_composer_actions! {
         aliases: [],
         action: ComposerAction::RemoveLastAttachment,
         defaults: vec![key_chord(KeyCode::Delete)]
+    ),
+    TranslateComposer => (
+        aliases: ["Translate"],
+        action: ComposerAction::Translate,
+        defaults: vec![ctrl_chord('t')]
     ),
     DeletePreviousChar => (
         aliases: [],

@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{collections::BTreeMap, fmt, path::PathBuf};
 
 use serde::{Deserialize, Serialize, de};
 
@@ -41,6 +41,19 @@ impl Default for ComposerOptions {
             emojis_as_links: false,
             ping_on_reply: true,
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SafetyOptions {
+    /// Extra account-risk safeguards, separate from cooldowns and permissions.
+    pub enabled: bool,
+}
+
+impl Default for SafetyOptions {
+    fn default() -> Self {
+        Self { enabled: true }
     }
 }
 
@@ -235,16 +248,87 @@ impl Default for PresenceOptions {
     }
 }
 
+#[derive(Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct TranslationOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<TranslationProviderKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_target_language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub composer_target_language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key_env: Option<String>,
+}
+
+impl fmt::Debug for TranslationOptions {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TranslationOptions")
+            .field("provider", &self.provider)
+            .field("message_target_language", &self.message_target_language)
+            .field("composer_target_language", &self.composer_target_language)
+            .field("endpoint", &self.endpoint)
+            .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
+            .field("api_key_env", &self.api_key_env)
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[non_exhaustive]
+pub enum TranslationProviderKind {
+    #[serde(rename = "deepl")]
+    DeepL,
+    #[serde(rename = "libretranslate")]
+    LibreTranslate,
+}
+
+impl TranslationProviderKind {
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::DeepL => "DeepL",
+            Self::LibreTranslate => "LibreTranslate",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AppOptions {
     pub display: DisplayOptions,
     pub composer: ComposerOptions,
+    pub safety: SafetyOptions,
     pub reactions: ReactionOptions,
     pub credentials: CredentialOptions,
     pub notifications: NotificationOptions,
     pub voice: VoiceOptions,
     pub presence: PresenceOptions,
+    pub translation: TranslationOptions,
+    pub klipy: KlipyOptions,
+}
+
+/// Optional KLIPY integration. Keys are never included in diagnostic output.
+#[derive(Clone, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct KlipyOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key_env: Option<String>,
+}
+
+impl fmt::Debug for KlipyOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("KlipyOptions")
+            .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
+            .field("api_key_env", &self.api_key_env)
+            .finish()
+    }
 }
 
 /// Validated Highlight Group and UI definitions from `theme.toml`.

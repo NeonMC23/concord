@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use crate::config::{
     AnimatePreviews, AppOptions, ComposerOptions, CredentialOptions, DisplayOptions,
     ImagePreviewQualityPreset, KeymapOptions, NotificationOptions, PresenceOptions,
-    ReactionOptions, UiStateOptions, VoiceOptions, VoiceParticipantPlaybackOption,
+    ReactionOptions, SafetyOptions, TranslationOptions, UiStateOptions, VoiceOptions,
+    VoiceParticipantPlaybackOption,
 };
 use crate::discord::ids::{Id, marker::UserMarker};
 use crate::discord::{AppCommand, VoiceAudioSourceOptions, VoiceParticipantPlaybackSettings};
@@ -60,6 +61,8 @@ impl DisplayOptionItem {
 pub(super) struct SettingsState {
     pub(super) display_options: DisplayOptions,
     pub(super) composer_options: ComposerOptions,
+    // Config-only: retain the choice when unrelated TUI options are saved.
+    pub(super) safety_options: SafetyOptions,
     pub(super) credential_options: CredentialOptions,
     pub(super) notification_options: NotificationOptions,
     pub(super) voice_options: VoiceOptions,
@@ -109,8 +112,20 @@ impl DashboardState {
         self.options.presence_options = presence_options;
     }
 
+    pub(in crate::tui) fn apply_safety_options(&mut self, safety_options: SafetyOptions) {
+        self.options.safety_options = safety_options;
+    }
+
     pub(in crate::tui) fn apply_reaction_options(&mut self, reaction_options: ReactionOptions) {
         self.options.reaction_options = reaction_options;
+    }
+
+    pub(in crate::tui) fn apply_translation_options(
+        &mut self,
+        translation_options: TranslationOptions,
+    ) {
+        self.translations.set_options(translation_options);
+        self.clear_message_row_content_metrics_cache();
     }
 
     #[cfg(test)]
@@ -364,11 +379,14 @@ impl DashboardState {
         Some(AppOptions {
             display: self.options.display_options,
             composer: self.options.composer_options,
+            safety: self.options.safety_options,
             reactions: self.options.reaction_options.clone(),
             credentials: self.options.credential_options,
             notifications: self.options.notification_options.clone(),
             voice: self.options.voice_options.clone(),
             presence: self.options.presence_options,
+            translation: self.translations.options().clone(),
+            klipy: self.klipy.options.clone(),
         })
     }
 

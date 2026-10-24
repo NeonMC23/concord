@@ -361,6 +361,20 @@ impl DashboardState {
                     Instant::now(),
                 );
             }
+            AppEvent::TranslationCompleted {
+                request_id,
+                target,
+                translated_text,
+            } => {
+                self.apply_translation_completed(*request_id, *target, translated_text);
+            }
+            AppEvent::TranslationFailed {
+                request_id,
+                target,
+                message,
+            } => {
+                self.apply_translation_failed(*request_id, *target, message);
+            }
             AppEvent::UpdateAvailable { latest_version } => {
                 self.discord.update_available_version = Some(latest_version.clone());
             }
@@ -607,8 +621,8 @@ impl DashboardState {
 
     fn clear_finished_voice_connection(&mut self, scope: VoiceScope) {
         self.runtime.stream_capture_targets_request = None;
-        self.runtime.stream_playback_preparing = None;
-        self.runtime.active_stream_playback = None;
+        self.runtime.stream_playback_preparing.clear();
+        self.runtime.active_stream_playbacks.clear();
         self.runtime.stream_broadcast_preparing = None;
         self.runtime.active_stream_broadcast = None;
         if self

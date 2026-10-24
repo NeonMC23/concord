@@ -12,6 +12,7 @@ mod diagnostics;
 mod discord_ui;
 mod emoji;
 mod events;
+pub(in crate::tui) mod gif_picker;
 mod guilds;
 mod layout_cache;
 mod local_upload_preview;
@@ -34,6 +35,7 @@ mod stream_info;
 mod subscriptions;
 mod text_completion;
 mod toast;
+mod translation;
 mod user;
 mod voice_actions;
 
@@ -57,6 +59,8 @@ use runtime_state::{
 };
 pub(in crate::tui) use scroll::SCROLL_OFF;
 use scroll::clamp_selected_index;
+pub(in crate::tui) use translation::MessageTranslationDisplay;
+use translation::TranslationUiState;
 
 pub(in crate::tui) const MINIMUM_ESTABLISHED_DM_MESSAGES: usize = 5;
 
@@ -69,23 +73,25 @@ pub use dashboard::DashboardState;
 pub use member_grouping::{MemberEntry, MemberGroup};
 pub(super) use member_grouping::{MemberRow, MemberRows};
 pub use message_viewport::MessagePaneSource;
-#[cfg(test)]
-pub(crate) use model::ActionAvailability;
 pub(in crate::tui) use model::ThreadCardImagePreview;
+#[cfg(test)]
+pub(crate) use model::{ActionAvailability, ChannelSwitcherDisplay};
 pub use model::{
     ActionItem, AppliedForumTag, AttachmentDownloadProgressView, AttachmentViewerItem,
     ChannelActionItem, ChannelPaneEntry, ChannelSearchSuggestionItem, ChannelSwitcherItem,
-    ChannelThreadItem, EmojiReactionItem, FocusPane, ForumPostComposerAttachmentView,
-    ForumPostComposerField, ForumPostComposerTagView, ForumPostComposerView, GuildActionItem,
-    GuildPaneEntry, LocalUploadPreviewView, MemberActionItem, MemberSearchResultItem,
-    MessageActionItem, MessageActionKind, MessageSearchResultItem, MuteActionDurationItem,
-    PollVotePickerItem, SearchFieldView, SearchPopupMode, SearchPopupView, SearchResultItem,
-    SearchSuggestionItem, ThreadActionItem, ThreadEditField, ThreadEditTagView, ThreadEditView,
-    ThreadMessagePreview, ThreadNotificationItem, ThreadSummary,
+    ChannelSwitcherMode, ChannelSwitcherView, ChannelThreadItem, EmojiReactionItem, FocusPane,
+    ForumPostComposerAttachmentView, ForumPostComposerField, ForumPostComposerTagView,
+    ForumPostComposerView, GuildActionItem, GuildPaneEntry, LocalUploadPreviewView,
+    MemberActionItem, MemberSearchResultItem, MessageActionItem, MessageActionKind,
+    MessageSearchResultItem, MuteActionDurationItem, PollVotePickerItem, SearchFieldView,
+    SearchPopupMode, SearchPopupView, SearchResultItem, SearchSuggestionItem, ThreadActionItem,
+    ThreadEditField, ThreadEditTagView, ThreadEditView, ThreadMessagePreview,
+    ThreadNotificationItem, ThreadSummary,
 };
 pub use model::{
     ChannelActionKind, GuildActionKind, MemberActionKind, MessageUrlItem, ThreadActionKind,
 };
+pub(in crate::tui) use navigation::FolderSettingsField;
 pub use options::{DisplayOptionGauge, DisplayOptionItem};
 pub(in crate::tui) use popups::{
     ActiveModalPopupKind, ConfirmationButton, DebugLogLine, DebugMediaSnapshot,

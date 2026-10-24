@@ -69,18 +69,40 @@ emerge -av net-im/concord
 ### Prebuilt releases
 
 Download an archive for Linux, macOS, or Windows from the
-[latest GitHub release](https://github.com/chojs23/concord/releases/latest), or
-run the release installer:
+[latest GitHub release](https://github.com/chojs23/concord/releases/latest).
+
+#### Linux and macOS
+
+Alternatively, run the shell release installer:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/chojs23/concord/releases/latest/download/concord-installer.sh | sh
 ```
 
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/chojs23/concord/releases/latest/download/concord-installer.ps1 | iex"
-```
+The shell installer places `concord` under `$CARGO_HOME/bin`.
 
-The installer places `concord` under `$CARGO_HOME/bin`.
+#### Windows
+
+1. Open the latest GitHub release linked above and download the archive for
+   `x86_64-pc-windows-msvc` from its assets.
+2. Extract the entire archive, then locate `concord.exe` inside the extracted
+   contents.
+3. Move the extracted contents, including `concord.exe` and any accompanying
+   runtime files, to a stable directory you can write to, such as a `Concord`
+   folder under your user folder. Keep the extracted file layout intact.
+4. Search the Start menu for **Edit environment variables for your account**.
+   In **Environment Variables**, select **Path** under **User variables**, then
+   choose **Edit** and **New**. Add the full path to the directory containing
+   `concord.exe`, not the archive or executable filename. Paths containing
+   spaces can be entered without quotes. Confirm the dialogs with **OK**.
+5. Close and reopen your terminal application, then run `concord`.
+
+Manual extraction uses the directory you choose; it does not install Concord
+under `$CARGO_HOME/bin` or update Path automatically.
+
+You can also install with [Cargo](#cargo). Cargo and other source builds require
+the Windows MSVC Rust toolchain, Visual Studio 2022 Build Tools with Desktop
+development with C++, CMake, and NASM; see [Build from source](#build-from-source).
 
 ### Runtime requirements
 
@@ -173,7 +195,7 @@ storage is unavailable. See the Security section below for details.
 ### Guilds & Channels
 
 - View, filter, and create forum/media posts (active / archived)
-- Switch channels, threads, and posts with the fuzzy channel switcher (`Space`, `Space`)
+- Switch channels, threads, and posts with the fuzzy channel switcher (`Space`, `Space`); start the query with `*` to search servers instead
 
 ### Messaging
 
@@ -182,6 +204,7 @@ storage is unavailable. See the Security section below for details.
 - Send custom emoji your account cannot use directly as image links when enabled
 - Rich content display (embeds, attachments, stickers, and mentions)
 - Detect URLs in message bodies and markdown links, then open them in your default browser
+- Translate messages and composer drafts
 
 #### Markdown Rendering & Code syntax highlighting
 
@@ -267,6 +290,14 @@ With default vim-style navigation:
 row movement keys are `SelectNext` and `SelectPrevious` and can be changed in
 `keymap.toml`.
 
+### Mouse controls
+
+| Gesture           | Action                                               |
+| ----------------- | ---------------------------------------------------- |
+| Left click        | Focus a pane, select an item, or use a popup control |
+| Double left click | Activate the selected item like `Enter`              |
+| Right click       | Open the clicked entry actions                       |
+
 #### Leader key
 
 Press `Space` to open the leader shortcut window.
@@ -309,6 +340,25 @@ selection.
 
 The composer supports copied file attachments and editing the current draft in
 `$EDITOR`. Pending uploads appear above the input before sending.
+
+#### GIF picker (KLIPY)
+
+Set `KLIPY_API_KEY` before launching Concord, or add an opt-in key to
+`config.toml`:
+
+```toml
+[klipy]
+api_key = "your-klipy-key"
+# Optional: read a different environment variable (takes precedence over api_key).
+# api_key_env = "MY_KLIPY_KEY"
+```
+
+Create a key in the [KLIPY Partner Panel](https://partner.klipy.com/) with **ads
+disabled**. Testing keys allow 100 API requests per hour; request production
+access through the panel when needed. Configure content filtering in the panel.
+See the [KLIPY integration requirements](https://docs.klipy.com/).
+
+`OpenGifPicker` can be remapped in `[keymap.composer]` in `keymap.toml`.
 
 #### Emoji picker
 
@@ -380,6 +430,14 @@ hour_format_24 = true
 # Send custom emoji your account cannot use directly as image links.
 emojis_as_links = false
 
+[safety]
+# Enable Concord's extra account-risk safeguards for spam/message-request DMs,
+# new conversations, empty channels, and server screening/onboarding/verification.
+# Set false to skip these safeguards at your own risk, then restart Concord.
+# Slow mode, message-history loading/failure locks, channel permissions, and
+# Discord's own rules and rate limits always apply.
+enabled = true
+
 [reactions]
 # Up to 10 unicode emoji pinned at the top of the reaction picker.
 # When unset or empty, Concord uses the built-in quick reactions.
@@ -389,6 +447,24 @@ emojis_as_links = false
 # Relay Rich Presence from local apps as your activity (most recent app wins,
 # like the native client).
 share_rich_presence = true
+
+[translation]
+# Translate selected messages and composer drafts when their target is set.
+# Supported providers: deepl or libretranslate.
+# provider = "deepl"
+# message_target_language = "KO"
+# composer_target_language = "EN"
+
+# Optional full API endpoint override. DeepL defaults to its Free API endpoint.
+# LibreTranslate defaults to http://127.0.0.1:5000/translate.
+# endpoint = "https://api.deepl.com/v2/translate"
+
+# Optional API key stored directly in this private config file.
+# api_key = "your-api-key"
+
+# Optional environment variable containing the API key. When set, its value
+# overrides api_key. DeepL checks DEEPL_API_KEY by default.
+# api_key_env = "DEEPL_API_KEY"
 
 [credentials]
 # Credential storage: auto, keychain, or plain.
@@ -436,10 +512,11 @@ push_to_talk_shortcut = "F8"
 noise_suppression = true
 
 # Optional microphone capture buffer duration in milliseconds, from 10 to 60.
-# When omitted, Concord accepts a sane host default and replaces an excessive
-# negotiated buffer with bounded 40ms or 60ms fixed attempts.
-# Setting a value forces that fixed duration and disables automatic recovery.
-# microphone_buffer_ms = 40
+# When omitted, Concord requests 50ms on Linux and 10ms on other platforms,
+# clamped to the device's supported range. It uses the host default only when
+# the range is unknown or the platform fixed buffer cannot be opened.
+# Setting a value forces that fixed duration.
+# microphone_buffer_ms = 50
 
 # Voice activity threshold in dB. Lower values transmit quieter input.
 microphone_sensitivity = -30
@@ -457,6 +534,43 @@ Concord cannot guarantee that the shortcut input also reaches the focused
 application.
 
 </details><br>
+
+### Message translation
+
+Press uppercase `T` in the Messages pane to translate the selected message.
+
+While editing the message composer, press `Ctrl-T` to translate the current
+draft. The composer shows the original above a `translated` divider and makes
+the translated draft editable. Press `Ctrl-T` again to return to the editable
+original.
+
+```toml
+[translation]
+provider = "deepl"
+message_target_language = "KO"
+composer_target_language = "EN"
+api_key = "your-deepl-api-key"
+```
+
+Both providers detect the source language automatically.
+
+The default DeepL endpoint is the Free API. DeepL Pro users can set
+`endpoint = "https://api.deepl.com/v2/translate"`.
+The `DEEPL_API_KEY` environment variable overrides `api_key` when present.
+
+LibreTranslate defaults to a local server and does not require an API key:
+
+```toml
+[translation]
+provider = "libretranslate"
+message_target_language = "KO"
+composer_target_language = "EN"
+```
+
+Set `endpoint` and `api_key` when using a hosted LibreTranslate instance.
+
+You can use `api_key_env` instead when an environment-based secret is more
+convenient.
 
 ### Key bindings
 
@@ -493,6 +607,7 @@ ResizePaneLeft = { keys = ["<A-h>", "<A-left>"] }
 ResizePaneRight = { keys = ["<A-l>", "<A-right>"] }
 Quit = "q"
 CopyMessage = "y"
+TranslateMessage = "T"
 ReactMessage = "r"
 ReplyMessage = "R"
 DeleteMessage = "d"
@@ -536,10 +651,13 @@ VoiceParticipantAudio = "a"
 ShowPinnedMessages = "p"
 ShowThreads = "t"
 MarkAsRead = "m"
+CloseDm = "c"
+LeaveGroup = "L"
 ToggleMute = "u"
 
 [keymap.message_actions]
 CopyMessage = "y"
+TranslateMessage = "T"
 ReactMessage = "r"
 ReplyMessage = "R"
 DeleteMessage = "d"
@@ -579,6 +697,8 @@ Submit = "enter"
 Close = "esc"
 ClearInput = "<C-c>"
 RemoveLastAttachment = "delete"
+TranslateComposer = "<C-t>"
+OpenGifPicker = "<C-g>"
 DeletePreviousChar = "backspace"
 DeletePreviousWord = { keys = ["<A-backspace>", "<C-backspace>", "<C-w>"] }
 DeleteToLineStart = "<C-u>"

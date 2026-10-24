@@ -3,6 +3,7 @@ use std::{collections::HashSet, time::Instant};
 use ratatui_image::picker::Picker;
 
 use crate::{
+    config::AnimatePreviews,
     discord::{AppCommand, AppEvent, ProfileAvatarUpload},
     tui::ui::AvatarImage,
 };
@@ -467,9 +468,16 @@ impl AvatarImageCache {
         &mut self,
         targets: &[AvatarTarget],
         now: Instant,
+        animate: AnimatePreviews,
     ) {
+        // The policy applies to list avatars. An open profile popup keeps animating.
         let visible = targets
             .iter()
+            .filter(|target| match animate {
+                AnimatePreviews::Always => true,
+                AnimatePreviews::Selected => target.selected,
+                AnimatePreviews::Never => false,
+            })
             .map(|target| {
                 avatar_preview_url(&target.url, AVATAR_PREVIEW_WIDTH, AVATAR_PREVIEW_HEIGHT)
             })

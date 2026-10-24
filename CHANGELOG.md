@@ -2,7 +2,106 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.5.19] - 2026-09-12
+## [2.6.3] - 2026-10-18
+
+### Bug Fixes
+
+- _(tui)_ Honor animate_previews for animated avatars (#394) in [#394](https://github.com/chojs23/concord/pull/394) by @pujitha24
+
+### Documentation
+
+- _(readme)_ Document Windows archive installation (#391) in [#391](https://github.com/chojs23/concord/pull/391) by @mvanhorn
+
+### Features
+
+- _(tui)_ Click a reaction chip to toggle your own reaction (#396) in [#396](https://github.com/chojs23/concord/pull/396) by @rropleka
+- _(discord)_ Add group DM leaving and close dm (#398) in [#398](https://github.com/chojs23/concord/pull/398) by @chojs23
+
+### New Contributors
+
+- @rropleka made their first contribution in [#396](https://github.com/chojs23/concord/pull/396)
+- @pujitha24 made their first contribution in [#394](https://github.com/chojs23/concord/pull/394)
+
+## [2.6.2] - 2026-10-15
+
+### Bug Fixes
+
+- _(tui)_ Show custom emoji names when images are disabled (#392) in [#392](https://github.com/chojs23/concord/pull/392) by @chojs23
+
+### Documentation
+
+- Remove ps1 installer path for now by @chojs23
+- Update Rust MSRV to 1.90 in CONTRIBUTING.md by @chojs23
+
+### Features
+
+- _(config)_ Make composer safety locks configurable (#393) in [#393](https://github.com/chojs23/concord/pull/393) by @chojs23
+
+### Miscellaneous Tasks
+
+- Update MSRV to Rust 1.99 by @chojs23
+
+## [2.6.1] - 2026-09-29
+
+### Bug Fixes
+
+- _(tui)_ Batch mouse-wheel redraws to reduce scroll lag (#381) in [#381](https://github.com/chojs23/concord/pull/381) by @chojs23
+
+### Documentation
+
+- Remove the powershell one-line installer path by @chojs23
+
+### Features
+
+- Add KLIPY GIF search to the composer (#377) in [#377](https://github.com/chojs23/concord/pull/377) by @TheDutchSmoke
+
+### New Contributors
+
+- @TheDutchSmoke made their first contribution in [#377](https://github.com/chojs23/concord/pull/377)
+
+## [2.6.0] - 2026-09-22
+
+### Features
+
+- _(tui)_ Rebuild mouse input around semantic interaction targets by @chojs23
+- _(message)_ Add message and composer translation by @chojs23
+
+## [2.5.22] - 2026-09-19
+
+### Bug Fixes
+
+- _(tui)_ Fix uncategorized channels appearing below category blocks (#372) in [#372](https://github.com/chojs23/concord/pull/372) by @chojs23
+- _(rpc)_ Preserve client-provided RPC activity names (#374) in [#374](https://github.com/chojs23/concord/pull/374) by @chojs23
+
+### Features
+
+- _(stream)_ Support concurrent stream playback (#373) in [#373](https://github.com/chojs23/concord/pull/373) by @chojs23
+
+## [2.5.21] - 2026-09-15
+
+### Bug Fixes
+
+- _(voice)_ Tolerate capture latency to prevent microphone dropouts (#369) in [#369](https://github.com/chojs23/concord/pull/369) by @chojs23
+- _(tui)_ Preserve reply composer drafts (#345) in [#345](https://github.com/chojs23/concord/pull/345) by @flooryyyy
+
+### Features
+
+- _(tui)_ Search servers in the channel switcher with a `*` prefix (#368) in [#368](https://github.com/chojs23/concord/pull/368) by @sunglasseslol
+
+### New Contributors
+
+- @sunglasseslol made their first contribution in [#368](https://github.com/chojs23/concord/pull/368)
+- @flooryyyy made their first contribution in [#345](https://github.com/chojs23/concord/pull/345)
+
+## [2.5.20] - 2026-09-12
+
+### Bug Fixes
+
+- _(voice)_ Adapt microphone buffering to device behavior (#361) in [#361](https://github.com/chojs23/concord/pull/361) by @chojs23
+- _(voice)_ Replace adaptive microphone recovery with fixed platform buffers (#363) in [#363](https://github.com/chojs23/concord/pull/363) by @chojs23
+- _(voice)_ Fix microphone frame loss caused by queue replacement by @chojs23
+
+## [2.5.19] - 2026-09-11
 
 ### Bug Fixes
 
@@ -1124,7 +1223,7 @@ All notable changes to this project will be documented in this file.
 
 ### Bug Fixes
 
-- _(tui)_ Detect URLs in reply quotes and forwarded messages (#107) by @SAY-5
+- _(tui)_ Detect URLs in reply quotes and forwarded messages (#107) in [#107](https://github.com/chojs23/concord/pull/107) by @SAY-5
 - Use transient typing display names for TYPING_START by @chojs23
 - Clear typing indicator when a typer sends a message by @chojs23
 - Composer newline fallbacks (#112) in [#112](https://github.com/chojs23/concord/pull/112) by @chojs23
@@ -1146,7 +1245,7 @@ All notable changes to this project will be documented in this file.
 
 ### New Contributors
 
-- @SAY-5 made their first contribution
+- @SAY-5 made their first contribution in [#107](https://github.com/chojs23/concord/pull/107)
 
 ## [2.0.3] - 2026-05-19
 

@@ -452,6 +452,8 @@ impl KeyBindings {
             | ComposerAction::InsertNewline
             | ComposerAction::ClearInput
             | ComposerAction::RemoveLastAttachment
+            | ComposerAction::OpenGifPicker
+            | ComposerAction::Translate
             | ComposerAction::ToggleReplyPing
             | ComposerAction::Ignore => None,
         }
@@ -911,6 +913,8 @@ impl KeyBindings {
             ChannelActionKind::ShowPinnedMessages => vec![char_chord('p')],
             ChannelActionKind::ShowThreads => vec![char_chord('t')],
             ChannelActionKind::MarkAsRead => vec![char_chord('m')],
+            ChannelActionKind::CloseDm => vec![char_chord('c')],
+            ChannelActionKind::LeaveGroup => vec![char_chord('L')],
             ChannelActionKind::ToggleMute => vec![char_chord('u')],
             ChannelActionKind::WatchStream => vec![char_chord('w')],
             ChannelActionKind::ParticipantAudioSettings => vec![char_chord('a')],
@@ -988,6 +992,7 @@ impl KeyBindings {
     fn default_message_action_shortcut(&self, kind: MessageActionKind) -> Vec<KeyChord> {
         vec![char_chord(match kind {
             MessageActionKind::CopyContent => 'y',
+            MessageActionKind::Translate => 'T',
             MessageActionKind::OpenReactionPicker => 'r',
             MessageActionKind::Reply => 'R',
             MessageActionKind::OpenDeleteConfirmation => 'd',

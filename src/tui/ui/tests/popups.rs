@@ -218,6 +218,61 @@ fn create_post_body_scrolls_inside_a_bounded_editor_and_fields_remain_reachable(
 }
 
 #[test]
+fn group_leave_confirmation_explains_rejoining_and_supports_mouse_buttons() {
+    use crate::tui::input::{MouseInputState, handle_key, handle_mouse_event};
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+
+    let channel_id = Id::new(20);
+    let mut state = DashboardState::new();
+    state.push_event(AppEvent::ChannelUpsert(ChannelInfo {
+        name: "Weekend plans with friends and family across several time zones".to_owned(),
+        ..ChannelInfo::test(channel_id, "group-dm")
+    }));
+    state.confirm_selected_guild();
+    state.focus_pane(FocusPane::Channels);
+
+    for (button_text, expected_command) in [
+        ("[n] cancel", None),
+        (
+            "[y] leave group",
+            Some(AppCommand::LeaveGroup { channel_id }),
+        ),
+    ] {
+        state.open_selected_channel_actions();
+        handle_key(
+            &mut state,
+            KeyEvent::new(KeyCode::Char('L'), KeyModifiers::NONE),
+        );
+        let dump = render_dashboard_dump(100, 24, &mut state);
+        let rendered = dump.join("\n");
+        assert!(rendered.contains("Leave this group DM?"));
+        assert!(rendered.contains("Group: Weekend plans with friends and family across s..."));
+        assert!(rendered.contains("Another member must add you back to rejoin."));
+        assert!(rendered.contains("› [n] cancel"));
+        let row = dump
+            .iter()
+            .position(|line| line.contains(button_text))
+            .expect("confirmation button is rendered");
+
+        let outcome = handle_mouse_event(
+            &mut state,
+            MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: 50,
+                row: u16::try_from(row).expect("test row fits in terminal"),
+                modifiers: KeyModifiers::NONE,
+            },
+            Rect::new(0, 0, 100, 24),
+            &mut MouseInputState::default(),
+        );
+        assert!(outcome.handled);
+        assert_eq!(outcome.command, expected_command);
+        assert_eq!(state.active_modal_popup_kind(), None);
+        assert_eq!(state.channels().len(), 1);
+    }
+}
+
+#[test]
 fn long_message_confirmation_explains_the_file_fallback() {
     let lines = long_message_confirmation_lines(2_001, 2_000, ConfirmationButton::default());
     let rendered = line_texts_from_ratatui(&lines);
@@ -269,11 +324,12 @@ fn owned_stream_info_omits_local_capture_source_without_viewers() {
 }
 
 #[test]
-fn stream_info_panel_separates_owned_and_watched_streams() {
+fn stream_info_panel_lists_owned_and_multiple_watched_streams() {
     let guild_id = Id::new(1);
     let channel_id = Id::new(10);
     let current_user_id = Id::new(20);
     let watched_owner_id = Id::new(30);
+    let second_watched_owner_id = Id::new(31);
     let viewer_id = Id::new(40);
     let scope = crate::discord::VoiceScope::Guild(guild_id);
     let mut state = DashboardState::new();
@@ -285,6 +341,7 @@ fn stream_info_panel_separates_owned_and_watched_streams() {
         users: vec![
             ChannelRecipientInfo::test(current_user_id, "Me"),
             ChannelRecipientInfo::test(watched_owner_id, "Broadcaster"),
+            ChannelRecipientInfo::test(second_watched_owner_id, "Second Broadcaster"),
             ChannelRecipientInfo::test(viewer_id, "Viewer"),
         ],
     });
@@ -294,6 +351,15 @@ fn stream_info_panel_separates_owned_and_watched_streams() {
             rtc_server_id: "100".to_owned(),
             rtc_channel_id: Id::new(101),
             viewer_ids: vec![viewer_id],
+            paused: false,
+        },
+    });
+    state.push_event(AppEvent::StreamCreate {
+        stream: crate::discord::StreamCreateInfo {
+            stream_key: "guild:1:10:31".to_owned(),
+            rtc_server_id: "300".to_owned(),
+            rtc_channel_id: Id::new(301),
+            viewer_ids: vec![current_user_id],
             paused: false,
         },
     });
@@ -314,6 +380,12 @@ fn stream_info_panel_separates_owned_and_watched_streams() {
         channel_id,
         user_id: watched_owner_id,
     });
+    state.show_stream_playback_preparing_toast(scope, channel_id, second_watched_owner_id);
+    state.push_effect(AppEvent::StreamPlaybackWindowReady {
+        scope,
+        channel_id,
+        user_id: second_watched_owner_id,
+    });
 
     let lines = stream_info_lines(&state);
     assert_eq!(
@@ -324,6 +396,10 @@ fn stream_info_panel_separates_owned_and_watched_streams() {
             "Viewer",
             "==================================",
             "Broadcaster 🔴",
+            "----------------------------------",
+            "Me",
+            "==================================",
+            "Second Broadcaster 🔴",
             "----------------------------------",
             "Me",
         ]
@@ -594,8 +670,8 @@ fn search_popup_message_results_show_sent_time() {
     let area = Rect::new(0, 0, 120, 28);
     let layout = active_selectable_popup_layout(area, &state).expect("search results layout");
     assert_eq!(
-        mouse_target_at(area, &state, layout.list.x, layout.list.y),
-        Some(MouseTarget::PopupRow {
+        interaction_at(area, &state, layout.list.x, layout.list.y),
+        Some(InteractionTarget::PopupItem {
             target: SelectablePopupTarget::SearchResults,
             row: 0,
         })
@@ -653,8 +729,8 @@ fn options_popup_variable_rows_share_paging_and_mouse_mapping() {
     assert_eq!(gauge_rows.len(), 2);
     for row in gauge_rows {
         assert_eq!(
-            mouse_target_at(area, &state, gauge_layout.list.x, row),
-            Some(MouseTarget::PopupRow {
+            interaction_at(area, &state, gauge_layout.list.x, row),
+            Some(InteractionTarget::PopupItem {
                 target: SelectablePopupTarget::Options,
                 row: gauge_index,
             })
@@ -1017,8 +1093,8 @@ fn current_user_profile_settings_render_contract() {
         .find(|row| layout.item_at(layout.list.x, *row) == Some(snapshot.selected))
         .expect("selected status should remain visible in a short popup");
     assert_eq!(
-        mouse_target_at(area, &state, layout.list.x, selected_screen_row),
-        Some(MouseTarget::PopupRow {
+        interaction_at(area, &state, layout.list.x, selected_screen_row),
+        Some(InteractionTarget::PopupItem {
             target: SelectablePopupTarget::UserProfileStatus,
             row: snapshot.selected,
         })
@@ -1590,24 +1666,26 @@ fn emoji_reaction_picker_uses_reaction_colors_and_selected_background() {
             })
         },
     ];
-    let custom_lines = emoji_reaction_picker_lines_with_custom_emoji_images(
-        &custom_reactions,
-        1,
-        EmojiReactionPickerRenderOptions {
-            key_bindings: &key_bindings,
-            max_visible_items: 10,
-            scroll: 0,
-            thumbnail_urls: &[],
-            own_reactions: &[],
-            show_custom_emoji: true,
-            filter: None,
-            max_width: usize::MAX,
-        },
-    );
-    assert_eq!(
-        line_texts_from_ratatui(&custom_lines),
-        vec!["  [1] 👍 Thumbs up", "▸ [2] :party: Party"]
-    );
+    for show_custom_emoji in [true, false] {
+        let custom_lines = emoji_reaction_picker_lines_with_custom_emoji_images(
+            &custom_reactions,
+            1,
+            EmojiReactionPickerRenderOptions {
+                key_bindings: &key_bindings,
+                max_visible_items: 10,
+                scroll: 0,
+                thumbnail_urls: &[],
+                own_reactions: &[],
+                show_custom_emoji,
+                filter: None,
+                max_width: usize::MAX,
+            },
+        );
+        assert_eq!(
+            line_texts_from_ratatui(&custom_lines),
+            vec!["  [1] 👍 Thumbs up", "▸ [2] :party: Party"]
+        );
+    }
 }
 
 #[test]
@@ -1662,19 +1740,29 @@ fn reaction_users_popup_lists_reactions() {
         ],
     );
 
-    let lines = reaction_list_lines(popup.entries(), popup.list_selected(), 0, 10, true, &[], 56);
+    for show_custom_emoji in [true, false] {
+        let lines = reaction_list_lines(
+            popup.entries(),
+            popup.list_selected(),
+            0,
+            10,
+            show_custom_emoji,
+            &[],
+            56,
+        );
 
-    let trimmed = line_texts_from_ratatui(&lines)
-        .into_iter()
-        .map(|line| line.trim_end().to_owned())
-        .collect::<Vec<_>>();
-    assert_eq!(trimmed, vec!["▸ 👍 55", "  :party: 23"]);
-    assert_eq!(
-        lines[0].spans[1].style.fg,
-        theme::current()
-            .style(theme::HighlightGroup::SelectedRow)
-            .fg
-    );
+        let trimmed = line_texts_from_ratatui(&lines)
+            .into_iter()
+            .map(|line| line.trim_end().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(trimmed, vec!["▸ 👍 55", "  :party: 23"]);
+        assert_eq!(
+            lines[0].spans[1].style.fg,
+            theme::current()
+                .style(theme::HighlightGroup::SelectedRow)
+                .fg
+        );
+    }
 }
 
 #[test]
@@ -2396,4 +2484,129 @@ fn keymap_popup_lines_show_help_content() {
             Some(Color::LightMagenta)
         );
     });
+}
+
+#[test]
+fn klipy_picker_renders_attribution_results_and_small_terminals() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let mut state = state_with_message();
+    state.start_composer();
+    state.apply_klipy_options(crate::config::KlipyOptions {
+        api_key: Some("test-key".to_owned()),
+        api_key_env: Some("CONCORD_KLIPY_TEST_UNSET_KEY".to_owned()),
+    });
+    state.open_gif_picker();
+    assert!(state.gif_picker().is_some());
+    let loading = render_dashboard_dump(100, 30, &mut state).join("\n");
+    assert!(loading.contains("Search KLIPY"));
+    assert!(loading.contains("Powered by KLIPY"));
+    assert!(loading.contains("Searching KLIPY"));
+    let generation = state.gif_picker().unwrap().generation;
+    state.store_gif_results(generation, Ok(serde_json::from_value(serde_json::json!({"has_next": true, "data": [
+        {"slug":"hello", "title":"Hello cat", "file":{"hd":{"gif":{"url":"https://static.klipy.com/cat.gif"}}}},
+        {"slug":"bye", "title":"Goodbye cat", "file":{"hd":{"gif":{"url":"https://static.klipy.com/bye.gif"}}}}
+    ]})).unwrap()));
+    state.move_gif_selection(crate::tui::keybindings::SelectionAction::Next);
+    state.move_gif_selection(crate::tui::keybindings::SelectionAction::Next);
+    let results = render_dashboard_dump(100, 30, &mut state).join("\n");
+    assert!(results.contains("› Goodbye cat"));
+    assert!(results.contains("Loading preview"));
+    assert!(
+        background_media_occlusion_areas(Rect::new(0, 0, 100, 30), &state).contains(
+            &crate::tui::ui::popups::gif_picker_popup_area(Rect::new(0, 0, 100, 30))
+        )
+    );
+    state.move_gif_selection(crate::tui::keybindings::SelectionAction::Next);
+    let loading_more = render_dashboard_dump(100, 30, &mut state).join("\n");
+    assert!(loading_more.contains("Loading more…"));
+    state.select_gif_query();
+    state.insert_gif_query(&"🐈".repeat(80));
+    for (width, height) in [(40, 14), (20, 8), (6, 4), (1, 1)] {
+        let dump = render_dashboard_dump(width, height, &mut state);
+        assert_eq!(dump.len(), usize::from(height));
+        assert!(crate::tui::ui::gif_picker_preview_area(Rect::new(0, 0, width, height)).is_empty());
+    }
+}
+
+#[test]
+fn klipy_picker_scrolls_all_titles_with_horizontal_keys() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let mut state = state_with_message();
+    state.start_composer();
+    state.apply_klipy_options(crate::config::KlipyOptions {
+        api_key: Some("test-key".to_owned()),
+        api_key_env: Some("CONCORD_KLIPY_TEST_UNSET_KEY".to_owned()),
+    });
+    state.open_gif_picker();
+    let generation = state.gif_picker().expect("GIF picker is open").generation;
+    state.store_gif_results(
+        generation,
+        Ok(serde_json::from_value(serde_json::json!({"has_next": false, "data": [
+            {"slug":"long", "title":format!("abc{}RIGHT_EDGE", "x".repeat(57)), "file":{"hd":{"gif":{"url":"https://static.klipy.com/long.gif"}}}},
+            {"slug":"short", "title":"Short GIF", "file":{"hd":{"gif":{"url":"https://static.klipy.com/short.gif"}}}}
+        ]}))
+        .expect("test GIF page is valid")),
+    );
+    state.move_gif_selection(crate::tui::keybindings::SelectionAction::Next);
+    let first = render_dashboard_dump(100, 30, &mut state).join("\n");
+    assert!(first.contains("› abcxxx"));
+
+    crate::tui::input::handle_key(
+        &mut state,
+        KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
+    );
+    let one_step = render_dashboard_dump(100, 30, &mut state).join("\n");
+    assert!(one_step.contains("› bcxxxx"));
+    assert!(one_step.contains("  hort GIF"));
+
+    crate::tui::input::handle_key(
+        &mut state,
+        KeyEvent::new(KeyCode::Char('L'), KeyModifiers::SHIFT),
+    );
+    assert_eq!(
+        state
+            .gif_picker()
+            .expect("GIF picker is open")
+            .horizontal_scroll,
+        11
+    );
+    crate::tui::input::handle_key(
+        &mut state,
+        KeyEvent::new(KeyCode::Char('H'), KeyModifiers::SHIFT),
+    );
+    assert_eq!(
+        state
+            .gif_picker()
+            .expect("GIF picker is open")
+            .horizontal_scroll,
+        1
+    );
+
+    for _ in 0..59 {
+        crate::tui::input::handle_key(
+            &mut state,
+            KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
+        );
+    }
+    let scrolled = render_dashboard_dump(100, 30, &mut state).join("\n");
+    assert!(scrolled.contains("› RIGHT_EDGE"));
+
+    for _ in 0..60 {
+        crate::tui::input::handle_key(&mut state, KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+    }
+    assert_eq!(render_dashboard_dump(100, 30, &mut state).join("\n"), first);
+
+    state.select_gif_query();
+    state.insert_gif_query("cat");
+    crate::tui::input::handle_key(&mut state, KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+    assert_eq!(
+        state
+            .gif_picker()
+            .expect("GIF picker is open")
+            .query
+            .cursor_byte_index(),
+        2
+    );
 }
