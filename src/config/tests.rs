@@ -6,12 +6,13 @@ use super::{
     AnimatePreviews, AppOptions, BorderShape, BorderSurface, ComposerOptions, CredentialOptions,
     CredentialStoreMode, DisplayOptions, HighlightGroup, ImagePreviewQualityPreset,
     ImageProtocolPreference, KeymapBinding, KeymapOptions, NotificationOptions, PresenceOptions,
-    SafetyOptions, ThemeOptions, TranslationOptions, TranslationProviderKind, VoiceOptions,
-    load_keymap_options_from_path, load_options_from_path, parse_app_options, parse_theme_options,
-    save_options_to_path,
+    SafetyOptions, ThemeOptions, TranslationOptions, TranslationProviderKind, UpdateOptions,
+    VoiceOptions, load_keymap_options_from_path, load_options_from_path, parse_app_options,
+    parse_theme_options, save_options_to_path,
 };
 use crate::discord::{
-    MicrophoneBufferMs, MicrophoneSensitivityDb, VoiceParticipantVolumePercent, VoiceVolumePercent,
+    MicrophoneBufferMs, MicrophoneSensitivityDb, ReactionEmoji, VoiceParticipantVolumePercent,
+    VoiceVolumePercent,
 };
 
 #[test]
@@ -149,6 +150,23 @@ fn safety_checks_default_to_enabled_and_follow_config() {
 
         assert_eq!(direct.safety.enabled, enabled, "{content}");
         assert_eq!(loaded.safety, direct.safety, "{content}");
+        assert!(warnings.is_empty(), "{content}");
+    }
+}
+
+#[test]
+fn update_check_defaults_to_enabled_and_follows_config() {
+    for (content, enabled) in [
+        ("", true),
+        ("[updates]\n", true),
+        ("[updates]\ncheck_for_updates = true\n", true),
+        ("[updates]\ncheck_for_updates = false\n", false),
+    ] {
+        let direct: AppOptions = toml::from_str(content).expect("updates config parses");
+        let (loaded, warnings) = parse_app_options(content).expect("updates config loads");
+
+        assert_eq!(direct.updates.check_for_updates, enabled, "{content}");
+        assert_eq!(loaded.updates, direct.updates, "{content}");
         assert!(warnings.is_empty(), "{content}");
     }
 }
@@ -709,6 +727,9 @@ fn options_save_and_load_round_trip() {
             api_key: Some("config-secret".to_owned()),
             api_key_env: None,
         },
+        updates: UpdateOptions {
+            check_for_updates: false,
+        },
     };
 
     save_options_to_path(&path, &options).expect("config should save");
@@ -773,19 +794,20 @@ favorite_emojis = ["🔥", "not-an-emoji", "👍", "🔥", "❤️", "😂", "�
     )
     .expect("reactions config should parse");
 
+    assert!(options.reactions.favorite_emojis.is_empty());
     assert_eq!(
-        options.reactions.favorite_emojis,
+        options.reactions.pinned_emojis,
         vec![
-            "🔥".to_owned(),
-            "👍".to_owned(),
-            "❤️".to_owned(),
-            "😂".to_owned(),
-            "🎉".to_owned(),
-            "😮".to_owned(),
-            "😢".to_owned(),
-            "🙏".to_owned(),
-            "👀".to_owned(),
-            "💯".to_owned(),
+            ReactionEmoji::Unicode("🔥".to_owned()),
+            ReactionEmoji::Unicode("👍".to_owned()),
+            ReactionEmoji::Unicode("❤️".to_owned()),
+            ReactionEmoji::Unicode("😂".to_owned()),
+            ReactionEmoji::Unicode("🎉".to_owned()),
+            ReactionEmoji::Unicode("😮".to_owned()),
+            ReactionEmoji::Unicode("😢".to_owned()),
+            ReactionEmoji::Unicode("🙏".to_owned()),
+            ReactionEmoji::Unicode("👀".to_owned()),
+            ReactionEmoji::Unicode("💯".to_owned()),
         ]
     );
     assert!(
@@ -810,7 +832,40 @@ fn reaction_favorite_emojis_default_empty() {
     let (options, warnings) =
         parse_app_options("[display]\n").expect("empty reactions should use defaults");
     assert!(options.reactions.favorite_emojis.is_empty());
+    assert!(options.reactions.pinned_emojis.is_empty());
     assert!(warnings.is_empty());
+}
+
+#[test]
+fn reaction_pinned_emojis_round_trips_custom_emoji_through_toml() {
+    use crate::config::ReactionOptions;
+
+    let options = ReactionOptions {
+        favorite_emojis: Vec::new(),
+        pinned_emojis: vec![
+            ReactionEmoji::Unicode("🔥".to_owned()),
+            ReactionEmoji::Custom {
+                id: crate::discord::ids::Id::new(42),
+                name: Some("party".to_owned()),
+                animated: false,
+            },
+        ],
+    };
+
+    let serialized = toml::to_string(&options).expect("reaction options should serialize");
+    let round_tripped: ReactionOptions =
+        toml::from_str(&serialized).expect("reaction options should round-trip");
+    assert_eq!(round_tripped, options);
+
+    let mut root = toml::Table::new();
+    root.insert(
+        "reactions".to_owned(),
+        toml::Value::try_from(&options).expect("reaction options should convert to a toml value"),
+    );
+    let (parsed, warnings) =
+        parse_app_options(&toml::to_string(&root).unwrap()).expect("reactions config should parse");
+    assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
+    assert_eq!(parsed.reactions, options);
 }
 
 #[test]

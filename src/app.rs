@@ -50,7 +50,7 @@ impl App {
         };
 
         loop {
-            let (fingerprint, http) = crate::discord::load_client_fingerprint_and_http().await;
+            let (fingerprint, http) = crate::discord::load_client_fingerprint_and_http().await?;
             let auth_session = DiscordAuthSession::with_http(fingerprint, http);
             let resolved_token = resolve_token(auth_session.clone()).await?;
             let token = resolved_token.token;
@@ -78,20 +78,23 @@ impl App {
             let command_task =
                 start_command_loop(client.clone(), commands_rx, app_options.translation.clone());
 
-            let version_client = client.clone();
-            tokio::spawn(async move {
-                match version_check::check_latest_version().await {
-                    Ok(Some(latest_version)) => {
-                        version_client
-                            .publish_event(AppEvent::UpdateAvailable { latest_version })
-                            .await;
+            if app_options.updates.check_for_updates {
+                let version_client = client.clone();
+                tokio::spawn(async move {
+                    match version_check::check_latest_version().await {
+                        Ok(Some(latest_version)) => {
+                            version_client
+                                .publish_event(AppEvent::UpdateAvailable { latest_version })
+                                .await;
+                        }
+                        Ok(None) => {}
+                        Err(error) => logging::debug(
+                            "version",
+                            format!("latest version check failed: {error}"),
+                        ),
                     }
-                    Ok(None) => {}
-                    Err(error) => {
-                        logging::debug("version", format!("latest version check failed: {error}"))
-                    }
-                }
-            });
+                });
+            }
 
             let result = async {
                 for warning in token_warnings {

@@ -497,6 +497,9 @@ impl KeyBindings {
             KeyCode::Backspace if filter_editing => {
                 Some(EmojiReactionPickerAction::DeleteFilterChar)
             }
+            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(EmojiReactionPickerAction::TogglePinned)
+            }
             KeyCode::Char('/') if is_shortcut_key(key) && !filter_editing => {
                 Some(EmojiReactionPickerAction::StartFilter)
             }
@@ -511,6 +514,10 @@ impl KeyBindings {
                 .selection_action(key, key_set)
                 .map(EmojiReactionPickerAction::Select),
         }
+    }
+
+    pub fn emoji_reaction_pin_toggle_label(&self) -> &'static str {
+        "Ctrl+f"
     }
 
     pub(in crate::tui) fn poll_vote_picker_action(
@@ -611,6 +618,9 @@ impl KeyBindings {
         &self,
         key: KeyEvent,
     ) -> ComposerCompletionAction {
+        if key.code == KeyCode::Char('f') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return ComposerCompletionAction::ToggleEmojiPin;
+        }
         if let Some(action) = self.selection_action(key, SelectionKeySet::TextSafe) {
             return ComposerCompletionAction::Select(action);
         }
@@ -709,12 +719,12 @@ impl KeyBindings {
         None
     }
 
-    /// Row movement aliases that keep their meaning outside text entry modes.
+    /// Unmodified arrows and Ctrl+n/p keep row movement outside text entry modes.
     pub(in crate::tui) fn fixed_selection_action(&self, key: KeyEvent) -> Option<SelectionAction> {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
-            KeyCode::Down => Some(SelectionAction::Next),
-            KeyCode::Up => Some(SelectionAction::Previous),
+            KeyCode::Down if key.modifiers.is_empty() => Some(SelectionAction::Next),
+            KeyCode::Up if key.modifiers.is_empty() => Some(SelectionAction::Previous),
             KeyCode::Char('n') if ctrl => Some(SelectionAction::Next),
             KeyCode::Char('p') if ctrl => Some(SelectionAction::Previous),
             _ => None,
